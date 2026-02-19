@@ -12,6 +12,7 @@
 	import FormatListBulletedSquare from '~icons/mdi/format-list-bulleted-square';
 	import Earth from '~icons/mdi/earth';
 	import Magnify from '~icons/mdi/magnify';
+	import Airplane from '~icons/mdi/airplane';
 	import Map from '~icons/mdi/map';
 	import Menu from '~icons/mdi/menu';
 	import Avatar from './Avatar.svelte';
@@ -115,6 +116,7 @@
 		{ path: '/worldtravel', icon: Earth, label: 'navbar.worldtravel' },
 		{ path: '/map', icon: Map, label: 'navbar.map' },
 		{ path: '/calendar', icon: Calendar, label: 'navbar.calendar' },
+		{ path: '/flights', icon: Airplane, label: 'navbar.flights' },
 		{ path: '/users', icon: AccountMultiple, label: 'navbar.users' }
 	];
 </script>

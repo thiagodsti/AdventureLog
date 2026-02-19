@@ -434,16 +434,7 @@
 		"export_zip": "ZIP をエクスポート",
 		"import_failed": "インポートに失敗しました",
 		"import_from_file": "ファイルからインポート",
-		"import_success": "インポート成功",
-		"duplicate": "複製",
-		"duplicate_location": "ロケーションを複製",
-		"location_duplicate_success": "場所が正常に複製されました。",
-		"location_duplicate_error": "ロケーションの複製に失敗しました。",
-		"location_actions": "ロケーション操作",
-		"collection_duplicate_success": "コレクションが正常に複製されました！リダイレクト中...",
-		"collection_duplicate_error": "コレクションの複製に失敗しました。",
-		"hide_strava_activities": "Strava アクティビティを非表示にする",
-		"show_strava_activities": "Strava アクティビティを表示する"
+		"import_success": "インポート成功"
 	},
 	"auth": {
 		"confirm_password": "パスワードを認証する",
@@ -661,9 +652,7 @@
 		"create_new_lodging": "新しい宿泊",
 		"enter_lodging_name": "宿泊名を入力します",
 		"enter_reservation_number": "予約番号を入力します",
-		"update_lodging_details": "宿泊の詳細を更新します",
-		"invalid_link": "有効な URL (例: https://example.com) を入力してください。",
-		"save_failed": "宿泊施設の保存に失敗しました。\nもう一度試してください。"
+		"update_lodging_details": "宿泊の詳細を更新します"
 	},
 	"map": {
 		"add_location": "新しい場所を追加します",
@@ -711,7 +700,8 @@
 		},
 		"users": "ユーザー",
 		"navigation": "ナビゲーション",
-		"worldtravel": "世界旅行"
+		"worldtravel": "世界旅行",
+		"flights": "Flights"
 	},
 	"notes": {
 		"content": "コンテンツ",

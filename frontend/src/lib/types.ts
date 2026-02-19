@@ -592,3 +592,93 @@ export type CollectionItineraryItem = {
 	start_datetime: string | null; // Computed property - ISO 8601 date string
 	end_datetime: string | null; // Computed property - ISO 8601 date string
 };
+
+// Flight email integration types
+export type EmailAccount = {
+	id: string;
+	name: string;
+	email_address: string;
+	provider: 'gmail' | 'outlook' | 'imap' | 'tuta';
+	imap_host: string;
+	imap_port: number;
+	imap_username: string;
+	use_ssl: boolean;
+	tuta_user: string;
+	is_active: boolean;
+	last_synced_at: string | null;
+	created_at: string;
+	updated_at: string;
+	flight_count: number;
+};
+
+export type AirlineRule = {
+	id: string;
+	airline_name: string;
+	airline_code: string;
+	sender_pattern: string;
+	subject_pattern: string;
+	body_pattern: string;
+	date_format: string;
+	time_format: string;
+	is_active: boolean;
+	is_builtin: boolean;
+	priority: number;
+	created_at: string;
+	updated_at: string;
+};
+
+export type Flight = {
+	id: string;
+	airline_name: string;
+	airline_code: string;
+	flight_number: string;
+	booking_reference: string;
+	departure_airport: string;
+	departure_city: string;
+	departure_datetime: string;
+	departure_terminal: string;
+	departure_gate: string;
+	arrival_airport: string;
+	arrival_city: string;
+	arrival_datetime: string;
+	arrival_terminal: string;
+	arrival_gate: string;
+	passenger_name: string;
+	seat: string;
+	cabin_class: string;
+	status: 'upcoming' | 'completed' | 'cancelled';
+	duration_minutes: number | null;
+	flight_group: string | null;
+	email_account: string | null;
+	airline_rule: string | null;
+	email_subject: string;
+	email_date: string | null;
+	is_manually_added: boolean;
+	notes: string;
+	created_at: string;
+	updated_at: string;
+};
+
+export type FlightGroup = {
+	id: string;
+	name: string;
+	description: string;
+	is_auto_generated: boolean;
+	flights: Flight[];
+	flight_count: number;
+	start_date: string | null;
+	end_date: string | null;
+	origin: string;
+	destination: string;
+	created_at: string;
+	updated_at: string;
+};
+
+export type FlightStats = {
+	total_flights: number;
+	total_duration_minutes: number;
+	total_duration_hours: number;
+	unique_airlines: string[];
+	unique_airports_count: number;
+	unique_airports: string[];
+};

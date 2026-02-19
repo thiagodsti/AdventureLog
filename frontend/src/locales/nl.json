@@ -434,16 +434,7 @@
 		"export_zip": "ZIP exporteren",
 		"import_failed": "Importeren mislukt",
 		"import_from_file": "Importeren uit bestand",
-		"import_success": "Succes importeren",
-		"duplicate": "Dupliceren",
-		"duplicate_location": "Locatie dupliceren",
-		"location_duplicate_success": "Locatie succesvol gedupliceerd!",
-		"location_duplicate_error": "Kan locatie niet dupliceren.",
-		"location_actions": "Locatie-acties",
-		"collection_duplicate_success": "Collectie succesvol gedupliceerd! Doorverwijzen...",
-		"collection_duplicate_error": "Kan collectie niet dupliceren.",
-		"hide_strava_activities": "Strava-activiteiten verbergen",
-		"show_strava_activities": "Strava-activiteiten weergeven"
+		"import_success": "Succes importeren"
 	},
 	"home": {
 		"desc_1": "Ontdek, plan en verken met gemak",
@@ -492,7 +483,8 @@
 		"calendar": "Kalender",
 		"admin_panel": "Admin -paneel",
 		"navigation": "Navigatie",
-		"worldtravel": "Wereldreizen"
+		"worldtravel": "Wereldreizen",
+		"flights": "Flights"
 	},
 	"auth": {
 		"confirm_password": "Bevestig wachtwoord",
@@ -1007,9 +999,7 @@
 		"create_new_lodging": "Nieuwe accommodatie",
 		"enter_lodging_name": "Voer een accommodatie in",
 		"enter_reservation_number": "Voer het reserveringsnummer in",
-		"update_lodging_details": "Update Lodging -details",
-		"invalid_link": "Voer een geldige URL in (bijvoorbeeld https://example.com).",
-		"save_failed": "Kan accommodatie niet opslaan. \nProbeer het opnieuw."
+		"update_lodging_details": "Update Lodging -details"
 	},
 	"google_maps": {
 		"google_maps_integration_desc": "Sluit uw Google Maps-account aan om zoekresultaten en aanbevelingen van hoge kwaliteit te krijgen.",

@@ -3,6 +3,7 @@ services:
     build: ./frontend/
     image: ghcr.io/seanmorley15/adventurelog-frontend:latest
     container_name: adventurelog-frontend
+    platform: linux/amd64
     restart: unless-stopped
     user: root
     env_file: .env
@@ -21,6 +22,7 @@ services:
   db:
     image: postgis/postgis:16-3.5
     container_name: adventurelog-db
+    platform: linux/amd64
     restart: unless-stopped
     env_file: .env
     volumes:
@@ -31,6 +33,7 @@ services:
     image: ghcr.io/seanmorley15/adventurelog-backend:latest
     container_name: adventurelog-backend
     restart: unless-stopped
+    platform: linux/amd64
     env_file: .env
     environment:
       - DJANGO_SUPERUSER_USERNAME=${DJANGO_ADMIN_USERNAME}
@@ -41,7 +44,7 @@ services:
     depends_on:
       - db
     volumes:
-      - ./backend/server:/code
+      - ./backend/server/flights:/code/flights
       - adventurelog_media:/code/media/
     command: >
       sh -c "memcached -u nobody -m 64 -p 11211 -d;

@@ -48,5 +48,7 @@ urlpatterns = [
 
     path("api/integrations/", include("integrations.urls")),
 
+    path("api/flights/", include("flights.urls")),
+
     # Include the API endpoints:   
 ]

@@ -434,16 +434,7 @@
 		"export_zip": "Експорт ZIP",
 		"import_failed": "Помилка імпорту",
 		"import_from_file": "Імпортувати з файлу",
-		"import_success": "Успішний імпорт",
-		"duplicate": "Дублювати",
-		"duplicate_location": "Дублювати місце",
-		"location_duplicate_success": "Розташування успішно скопійовано!",
-		"location_duplicate_error": "Не вдалося дублювати місце.",
-		"location_actions": "Дії з місцем",
-		"collection_duplicate_success": "Колекцію успішно дубльовано! Перенаправлення...",
-		"collection_duplicate_error": "Не вдалося дублювати колекцію.",
-		"hide_strava_activities": "Приховати дії Strava",
-		"show_strava_activities": "Показати діяльність Strava"
+		"import_success": "Успішний імпорт"
 	},
 	"auth": {
 		"confirm_password": "Підтвердьте пароль",
@@ -661,9 +652,7 @@
 		"reservation_number": "Номер бронювання",
 		"resort": "курорт",
 		"update_lodging_details": "Оновити дані про проживання",
-		"villa": "Вілла",
-		"invalid_link": "Введіть дійсну URL-адресу (наприклад, https://example.com).",
-		"save_failed": "Не вдалося зберегти житло. \nСпробуйте ще раз."
+		"villa": "Вілла"
 	},
 	"map": {
 		"add_location": "Додати нове місце",
@@ -711,7 +700,8 @@
 			"northernLights": "Північне сяйво"
 		},
 		"users": "Користувачі",
-		"worldtravel": "Світові подорожі"
+		"worldtravel": "Світові подорожі",
+		"flights": "Flights"
 	},
 	"notes": {
 		"content": "Зміст",

@@ -434,16 +434,7 @@
 		"export_zip": "Exporter le code postal",
 		"import_failed": "Échec de l'importation",
 		"import_success": "Succès de l'importation",
-		"import_from_file": "Importer à partir d'un fichier",
-		"duplicate": "Dupliquer",
-		"duplicate_location": "Dupliquer le lieu",
-		"location_duplicate_success": "Emplacement dupliqué avec succès !",
-		"location_duplicate_error": "Échec de la duplication du lieu.",
-		"location_actions": "Actions du lieu",
-		"collection_duplicate_success": "Collection dupliquée avec succès ! Redirection...",
-		"collection_duplicate_error": "Échec de la duplication de la collection.",
-		"hide_strava_activities": "Masquer les activités Strava",
-		"show_strava_activities": "Afficher les activités Strava"
+		"import_from_file": "Importer à partir d'un fichier"
 	},
 	"home": {
 		"desc_1": "Découvrez, planifiez et explorez en toute simplicité",
@@ -492,7 +483,8 @@
 		"calendar": "Calendrier",
 		"admin_panel": "Panneau d'administration",
 		"navigation": "Navigation",
-		"worldtravel": "Voyage dans le monde"
+		"worldtravel": "Voyage dans le monde",
+		"flights": "Flights"
 	},
 	"auth": {
 		"confirm_password": "Confirmer le mot de passe",
@@ -1007,9 +999,7 @@
 		"create_new_lodging": "Nouveau logement",
 		"enter_lodging_name": "Entrez le nom de l'hébergement",
 		"enter_reservation_number": "Entrez le numéro de réservation",
-		"update_lodging_details": "Mettre à jour les détails de l'hébergement",
-		"invalid_link": "Veuillez saisir une URL valide (par exemple https://example.com).",
-		"save_failed": "Échec de l'enregistrement de l'hébergement. \nVeuillez réessayer."
+		"update_lodging_details": "Mettre à jour les détails de l'hébergement"
 	},
 	"google_maps": {
 		"google_maps_integration_desc": "Connectez votre compte Google Maps pour obtenir des résultats de recherche et recommandations de recherche de haute qualité.",
