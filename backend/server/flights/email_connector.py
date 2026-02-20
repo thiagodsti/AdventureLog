@@ -257,14 +257,10 @@ def fetch_emails_for_account(email_account, since_date=None, max_results=200) ->
     High-level function: fetch flight-related emails from an EmailAccount model instance.
     Uses the account's provider to select the right fetching method.
     """
-    from django.db.models import Q
-    from .models import AirlineRule
+    from .builtin_rules import get_builtin_rules
 
-    # Get all active rules (user-specific + system)
-    user_rules = AirlineRule.objects.filter(is_active=True).filter(
-        Q(user=email_account.user) | Q(user__isnull=True)
-    )
-    sender_patterns = [r.sender_pattern for r in user_rules if r.sender_pattern]
+    # Sender patterns come from code-defined rules only (no DB query)
+    sender_patterns = [r.sender_pattern for r in get_builtin_rules() if r.sender_pattern]
 
     provider = email_account.provider
     if provider in ('gmail', 'outlook', 'imap'):

@@ -33,6 +33,9 @@ class FlightViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user, is_manually_added=True)
+        # Auto-group after adding a flight
+        from flights.grouping import auto_group_flights
+        auto_group_flights(self.request.user)
 
     @action(detail=False, methods=['get'])
     def upcoming(self, request):

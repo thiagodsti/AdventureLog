@@ -272,4 +272,8 @@ class Flight(models.Model):
         if self.departure_datetime and self.arrival_datetime and not self.duration_minutes:
             delta = self.arrival_datetime - self.departure_datetime
             self.duration_minutes = max(int(delta.total_seconds() / 60), 1)
+        # Auto-compute status based on arrival time; never override a manual 'cancelled'
+        if self.status != 'cancelled' and self.arrival_datetime:
+            from django.utils import timezone as _tz
+            self.status = 'completed' if self.arrival_datetime < _tz.now() else 'upcoming'
         super().save(*args, **kwargs)

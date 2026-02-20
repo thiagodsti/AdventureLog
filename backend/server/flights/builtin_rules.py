@@ -1,6 +1,10 @@
 """
-Built-in airline parsing rules.
-These are loaded via management command `load_airline_rules`.
+Built-in airline parsing rules (code-only, not stored in the database).
+
+Rules are defined as plain Python data in BUILTIN_AIRLINE_RULES and exposed
+as BuiltinAirlineRule dataclass objects via get_builtin_rules().  Users cannot
+create or edit these rules — to add support for a new airline, add an entry to
+BUILTIN_AIRLINE_RULES below and write a test in tests/test_<airline>.py.
 
 Each body_pattern uses regex named groups to capture flight data.
 Required named groups: flight_number, departure_airport, arrival_airport,
@@ -14,6 +18,8 @@ attempt to find the closest preceding date in the email body.
 The patterns are designed to work against the output of html_to_text()
 which inserts newlines after block-level HTML elements.
 """
+
+from dataclasses import dataclass, field
 
 # ---------------------------------------------------------------------------
 # Flexible date sub-pattern (reusable)
@@ -199,3 +205,30 @@ BUILTIN_AIRLINE_RULES = [
         'priority': 10,
     },
 ]
+
+
+@dataclass
+class BuiltinAirlineRule:
+    """
+    Lightweight, in-memory representation of an airline parsing rule.
+    Has the same interface as the AirlineRule model for use in parsers.
+    """
+    airline_name: str
+    airline_code: str
+    sender_pattern: str
+    body_pattern: str
+    date_format: str
+    time_format: str
+    is_active: bool
+    is_builtin: bool
+    priority: int
+    subject_pattern: str = ''
+
+
+def get_builtin_rules() -> list[BuiltinAirlineRule]:
+    """Return all active built-in airline rules as in-memory objects (no DB query)."""
+    return [
+        BuiltinAirlineRule(**rule)
+        for rule in BUILTIN_AIRLINE_RULES
+        if rule.get('is_active', True)
+    ]

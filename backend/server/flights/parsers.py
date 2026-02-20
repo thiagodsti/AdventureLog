@@ -1,17 +1,20 @@
 """
 Flight email parsing engine.
 Applies airline rules (regex patterns) to email messages to extract flight data.
+
+Rules come from builtin_rules.get_builtin_rules() — they are defined in code and
+are not stored in or fetched from the database.
 """
 
 import logging
 import re
 from datetime import datetime, date as date_type, timezone
 
-from django.db.models import Q
 from django.utils import timezone as dj_timezone
 
+from .builtin_rules import get_builtin_rules
 from .email_connector import EmailMessage
-from .models import AirlineRule, Flight, EmailAccount
+from .models import Flight, EmailAccount
 
 logger = logging.getLogger(__name__)
 
@@ -90,15 +93,13 @@ def parse_flight_date(raw: str) -> date_type | None:
 
 
 def get_rules_for_user(user):
-    """Get all active airline rules available to a user (their own + system rules)."""
-    return AirlineRule.objects.filter(
-        is_active=True
-    ).filter(
-        Q(user=user) | Q(user__isnull=True)
-    ).order_by('-priority', 'airline_name')
+    """Return the active built-in airline rules (code-defined, no DB query).
+    The `user` argument is kept for API compatibility but is no longer used.
+    """
+    return sorted(get_builtin_rules(), key=lambda r: (-r.priority, r.airline_name))
 
 
-def match_rule_to_email(email_msg: EmailMessage, rules) -> AirlineRule | None:
+def match_rule_to_email(email_msg: EmailMessage, rules):
     """
     Find the first matching airline rule for an email message.
     Checks sender_pattern and optionally subject_pattern.
@@ -121,7 +122,7 @@ def match_rule_to_email(email_msg: EmailMessage, rules) -> AirlineRule | None:
     return None
 
 
-def extract_flights_from_email(email_msg: EmailMessage, rule: AirlineRule) -> list[dict]:
+def extract_flights_from_email(email_msg: EmailMessage, rule) -> list[dict]:
     """
     Apply a rule's body_pattern regex to an email body and extract flight data.
     Returns a list of dicts, one per flight found (regex finditer for multi-leg trips).
@@ -308,7 +309,7 @@ def process_email_for_flights(email_msg: EmailMessage, user, email_account: Emai
             flight = Flight.objects.create(
                 user=user,
                 email_account=email_account,
-                airline_rule=rule,
+                airline_rule=None,  # rules are code-defined, not DB rows
                 email_subject=email_msg.subject[:512],
                 email_date=email_msg.date,
                 email_message_id=msg_id_for_dedup,
@@ -343,19 +344,8 @@ def sync_email_account(email_account: EmailAccount) -> dict:
 
     try:
         since_date = email_account.last_synced_at
-
-        # If rules changed since last sync, do a full re-scan
-        if since_date is not None:
-            rules = get_rules_for_user(user)
-            rules_changed = rules.filter(
-                Q(created_at__gt=since_date) | Q(updated_at__gt=since_date)
-            ).exists()
-            if rules_changed:
-                logger.info(
-                    "Rules changed since last sync (%s), doing full re-scan for %s",
-                    since_date, email_account.email_address,
-                )
-                since_date = None
+        # Rules are code-defined and never change at runtime, so incremental
+        # syncing is always safe — no need to check for rule updates.
 
         email_messages = fetch_emails_for_account(
             email_account, since_date=since_date, max_results=500
@@ -373,6 +363,11 @@ def sync_email_account(email_account: EmailAccount) -> dict:
         # Update last synced timestamp
         email_account.last_synced_at = dj_timezone.now()
         email_account.save(update_fields=['last_synced_at'])
+
+        # Auto-group flights after every sync
+        if summary['flights_created'] > 0:
+            from .grouping import auto_group_flights
+            auto_group_flights(user)
 
     except NotImplementedError as e:
         summary['errors'].append(str(e))

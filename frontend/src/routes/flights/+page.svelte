@@ -2,18 +2,16 @@
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { t } from 'svelte-i18n';
-	import type { Flight, FlightGroup, EmailAccount, AirlineRule, FlightStats } from '$lib/types';
+	import type { Flight, FlightGroup, EmailAccount, FlightStats } from '$lib/types';
 
 	import Airplane from '~icons/mdi/airplane';
 	import AirplaneTakeoff from '~icons/mdi/airplane-takeoff';
 	import AirplaneLanding from '~icons/mdi/airplane-landing';
 	import Email from '~icons/mdi/email-outline';
-	import Cog from '~icons/mdi/cog-outline';
 	import Plus from '~icons/mdi/plus';
 	import Delete from '~icons/mdi/delete-outline';
 	import Sync from '~icons/mdi/sync';
 	import Clock from '~icons/mdi/clock-outline';
-	import MapMarker from '~icons/mdi/map-marker';
 	import SeatRecline from '~icons/mdi/seat-recline-normal';
 	import Ticket from '~icons/mdi/ticket-outline';
 
@@ -22,27 +20,35 @@
 	let flights: Flight[] = data.props.flights;
 	let flightGroups: FlightGroup[] = data.props.flightGroups;
 	let emailAccounts: EmailAccount[] = data.props.emailAccounts;
-	let airlineRules: AirlineRule[] = data.props.airlineRules;
 	let stats: FlightStats | null = data.props.stats;
 
-	let activeTab: 'flights' | 'emails' | 'rules' = 'flights';
+	let activeTab: 'flights' | 'emails' = 'flights';
+	// 'upcoming' shows future flights; 'history' shows completed/cancelled
+	let flightView: 'upcoming' | 'history' = 'upcoming';
 	let viewMode: 'trips' | 'all' = 'trips';
 	let showAddFlightModal = false;
 	let showAddEmailModal = false;
-	let showAddRuleModal = false;
 	let syncing: string | null = null;
-	let autoGrouping = false;
 	let expandedGroups: Set<string> = new Set();
 
-	// Filter state
-	let statusFilter: string = '';
+	$: upcomingFlights = flights.filter((f) => f.status === 'upcoming');
+	$: historyFlights = flights.filter((f) => f.status !== 'upcoming');
+	$: displayedFlights = flightView === 'upcoming' ? upcomingFlights : historyFlights;
 
-	$: filteredFlights = statusFilter ? flights.filter((f) => f.status === statusFilter) : flights;
-	$: sortedGroups = [...flightGroups].sort((a, b) => {
+	$: allSortedGroups = [...flightGroups].sort((a, b) => {
 		const aDate = a.start_date ? new Date(a.start_date).getTime() : 0;
 		const bDate = b.start_date ? new Date(b.start_date).getTime() : 0;
 		return bDate - aDate;
 	});
+	// Upcoming groups: at least one upcoming flight
+	$: upcomingGroups = allSortedGroups.filter((g) =>
+		g.flights && g.flights.some((f: Flight) => f.status === 'upcoming')
+	);
+	// History groups: all flights are completed/cancelled
+	$: historyGroups = allSortedGroups.filter(
+		(g) => !g.flights || g.flights.every((f: Flight) => f.status !== 'upcoming')
+	);
+	$: sortedGroups = flightView === 'upcoming' ? upcomingGroups : historyGroups;
 
 	function toggleGroup(id: string) {
 		if (expandedGroups.has(id)) {
@@ -163,17 +169,34 @@
 		>
 			<Email class="mr-1" /> Email Accounts
 		</button>
-		<button
-			role="tab"
-			class="tab {activeTab === 'rules' ? 'tab-active' : ''}"
-			on:click={() => (activeTab = 'rules')}
-		>
-			<Cog class="mr-1" /> Airline Rules
-		</button>
 	</div>
 
 	<!-- ===================== FLIGHTS TAB ===================== -->
 	{#if activeTab === 'flights'}
+		<!-- Upcoming / History sub-tabs -->
+		<div role="tablist" class="tabs tabs-bordered mb-4">
+			<button
+				role="tab"
+				class="tab {flightView === 'upcoming' ? 'tab-active font-semibold' : ''}"
+				on:click={() => (flightView = 'upcoming')}
+			>
+				Upcoming
+				{#if upcomingFlights.length > 0}
+					<span class="badge badge-sm badge-primary ml-1">{upcomingFlights.length}</span>
+				{/if}
+			</button>
+			<button
+				role="tab"
+				class="tab {flightView === 'history' ? 'tab-active font-semibold' : ''}"
+				on:click={() => (flightView = 'history')}
+			>
+				History
+				{#if historyFlights.length > 0}
+					<span class="badge badge-sm badge-ghost ml-1">{historyFlights.length}</span>
+				{/if}
+			</button>
+		</div>
+
 		<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
 			<div class="flex gap-2 items-center">
 				<!-- View mode toggle -->
@@ -191,37 +214,8 @@
 						All Flights
 					</button>
 				</div>
-				{#if viewMode === 'all'}
-					<select class="select select-sm" bind:value={statusFilter}>
-						<option value="">All Flights</option>
-						<option value="upcoming">Upcoming</option>
-						<option value="completed">Completed</option>
-						<option value="cancelled">Cancelled</option>
-					</select>
-				{/if}
 			</div>
 			<div class="flex gap-2">
-				<form
-					method="POST"
-					action="?/autoGroupFlights"
-					use:enhance={() => {
-						autoGrouping = true;
-						return async ({ result }) => {
-							autoGrouping = false;
-							if (result.type === 'success') {
-								await invalidateAll();
-								flights = data.props.flights;
-								flightGroups = data.props.flightGroups;
-								stats = data.props.stats;
-							}
-						};
-					}}
-				>
-					<button class="btn btn-ghost btn-sm" disabled={autoGrouping} title="Auto-group flights into trips">
-						<Sync class={autoGrouping ? 'animate-spin' : ''} />
-						Auto-group
-					</button>
-				</form>
 				<button class="btn btn-primary btn-sm" on:click={() => (showAddFlightModal = true)}>
 					<Plus /> Add Flight
 				</button>
@@ -233,9 +227,13 @@
 			{#if sortedGroups.length === 0}
 				<div class="text-center py-16">
 					<Airplane class="mx-auto text-5xl text-base-content/20 mb-4" />
-					<h2 class="text-xl font-semibold text-base-content/50">No trips yet</h2>
+					<h2 class="text-xl font-semibold text-base-content/50">
+						{flightView === 'upcoming' ? 'No upcoming trips' : 'No past trips'}
+					</h2>
 					<p class="text-base-content/40 mt-2">
-						Add flights and click "Auto-group" to organize them into trips.
+						{flightView === 'upcoming'
+							? 'Add flights and click "Auto-group" to organize them into trips.'
+							: 'Your completed trips will appear here.'}
 					</p>
 				</div>
 			{:else}
@@ -419,17 +417,21 @@
 
 		<!-- ===== ALL FLIGHTS VIEW ===== -->
 		{:else}
-			{#if filteredFlights.length === 0}
+			{#if displayedFlights.length === 0}
 				<div class="text-center py-16">
 					<Airplane class="mx-auto text-5xl text-base-content/20 mb-4" />
-					<h2 class="text-xl font-semibold text-base-content/50">No flights yet</h2>
+					<h2 class="text-xl font-semibold text-base-content/50">
+						{flightView === 'upcoming' ? 'No upcoming flights' : 'No past flights'}
+					</h2>
 					<p class="text-base-content/40 mt-2">
-						Connect an email account to scan for flights, or add one manually.
+						{flightView === 'upcoming'
+							? 'Connect an email account to scan for flights, or add one manually.'
+							: 'Your completed flights will appear here.'}
 					</p>
 				</div>
 			{:else}
 				<div class="grid gap-4">
-					{#each filteredFlights as flight}
+					{#each displayedFlights as flight}
 						<div class="card card-border bg-base-100 shadow-sm">
 							<div class="card-body p-4 sm:p-6">
 								<div class="flex flex-col lg:flex-row lg:items-center gap-4">
@@ -630,82 +632,7 @@
 		{/if}
 	{/if}
 
-	<!-- ===================== AIRLINE RULES TAB ===================== -->
-	{#if activeTab === 'rules'}
-		<div class="flex justify-between items-center mb-4">
-			<h2 class="text-lg font-semibold">Airline Parsing Rules</h2>
-			<button class="btn btn-primary btn-sm" on:click={() => (showAddRuleModal = true)}>
-				<Plus /> Add Rule
-			</button>
-		</div>
-
-		{#if airlineRules.length === 0}
-			<div class="text-center py-16">
-				<Cog class="mx-auto text-5xl text-base-content/20 mb-4" />
-				<h2 class="text-xl font-semibold text-base-content/50">No airline rules</h2>
-				<p class="text-base-content/40 mt-2">
-					Airline rules define how flight emails are parsed. Load built-in rules from the admin
-					panel or create your own.
-				</p>
-			</div>
-		{:else}
-			<div class="overflow-x-auto">
-				<table class="table table-sm">
-					<thead>
-						<tr>
-							<th>Airline</th>
-							<th>Code</th>
-							<th>Sender Pattern</th>
-							<th>Priority</th>
-							<th>Type</th>
-							<th>Actions</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each airlineRules as rule}
-							<tr>
-								<td class="font-medium">{rule.airline_name}</td>
-								<td>
-									<span class="badge badge-sm badge-outline">{rule.airline_code || '—'}</span>
-								</td>
-								<td class="text-xs font-mono max-w-[200px] truncate">
-									{rule.sender_pattern}
-								</td>
-								<td>{rule.priority}</td>
-								<td>
-									<span class="badge badge-sm {rule.is_builtin ? 'badge-info' : 'badge-accent'}">
-										{rule.is_builtin ? 'Built-in' : 'Custom'}
-									</span>
-								</td>
-								<td>
-									{#if !rule.is_builtin}
-										<form
-											method="POST"
-											action="?/deleteAirlineRule"
-											use:enhance={() => {
-												return async ({ result }) => {
-													if (result.type === 'success') {
-														airlineRules = airlineRules.filter((r) => r.id !== rule.id);
-													}
-												};
-											}}
-										>
-											<input type="hidden" name="id" value={rule.id} />
-											<button class="btn btn-ghost btn-xs" title="Delete">
-												<Delete class="text-error" />
-											</button>
-										</form>
-									{:else}
-										<span class="text-xs text-base-content/30">Protected</span>
-									{/if}
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		{/if}
-	{/if}
+	<!-- ===================== EMAIL ACCOUNTS TAB (continued) ===================== -->
 </div>
 
 <!-- ===================== ADD FLIGHT MODAL ===================== -->
@@ -1056,128 +983,3 @@
 	</dialog>
 {/if}
 
-<!-- ===================== ADD AIRLINE RULE MODAL ===================== -->
-{#if showAddRuleModal}
-	<dialog class="modal modal-open" on:close={() => (showAddRuleModal = false)}>
-		<div class="modal-box max-w-2xl">
-			<h3 class="font-bold text-lg mb-4">Add Airline Rule</h3>
-			<p class="text-sm text-base-content/60 mb-4">
-				Define regex patterns to extract flight information from airline confirmation emails. Use
-				Python regex named groups:
-				<code class="text-xs">(?P&lt;flight_number&gt;...)</code>
-			</p>
-			<form
-				method="POST"
-				action="?/createAirlineRule"
-				use:enhance={() => {
-					return async ({ result }) => {
-						if (result.type === 'success') {
-							showAddRuleModal = false;
-							await invalidateAll();
-							airlineRules = data.props.airlineRules;
-						}
-					};
-				}}
-			>
-				<div class="flex flex-col gap-4">
-					<div class="grid grid-cols-2 gap-3">
-						<fieldset class="fieldset">
-							<legend class="fieldset-legend">Airline Name *</legend>
-							<input
-								type="text"
-								name="airline_name"
-								class="input input-sm w-full"
-								placeholder="e.g. Emirates"
-								required
-							/>
-						</fieldset>
-						<fieldset class="fieldset">
-							<legend class="fieldset-legend">IATA Code</legend>
-							<input
-								type="text"
-								name="airline_code"
-								class="input input-sm w-full"
-								placeholder="e.g. EK"
-								maxlength="10"
-							/>
-						</fieldset>
-					</div>
-
-					<fieldset class="fieldset">
-						<legend class="fieldset-legend">Sender Pattern (regex) *</legend>
-						<input
-							type="text"
-							name="sender_pattern"
-							class="input input-sm w-full font-mono text-xs"
-							placeholder="e.g. emirates\.com"
-							required
-						/>
-						<p class="label text-xs">Regex matched against the email From header</p>
-					</fieldset>
-
-					<fieldset class="fieldset">
-						<legend class="fieldset-legend">Subject Pattern (regex)</legend>
-						<input
-							type="text"
-							name="subject_pattern"
-							class="input input-sm w-full font-mono text-xs"
-							placeholder="e.g. (booking|confirm|itinerary)"
-						/>
-						<p class="label text-xs">Optional. Regex matched against email subject</p>
-					</fieldset>
-
-					<fieldset class="fieldset">
-						<legend class="fieldset-legend">Body Pattern (regex with named groups) *</legend>
-						<textarea
-							name="body_pattern"
-							class="textarea textarea-sm w-full font-mono text-xs"
-							rows="6"
-							placeholder={'(?P<flight_number>EK\\s*\\d{3,5})...'}
-							required
-						></textarea>
-						<p class="label text-xs">
-							Required named groups: flight_number, departure_airport, arrival_airport,
-							departure_date, departure_time, arrival_time. Optional: arrival_date,
-							booking_reference, passenger_name, seat, cabin_class
-						</p>
-					</fieldset>
-
-					<div class="grid grid-cols-3 gap-3">
-						<fieldset class="fieldset">
-							<legend class="fieldset-legend">Date Format</legend>
-							<input
-								type="text"
-								name="date_format"
-								class="input input-sm w-full font-mono text-xs"
-								value="%d %b %Y"
-							/>
-						</fieldset>
-						<fieldset class="fieldset">
-							<legend class="fieldset-legend">Time Format</legend>
-							<input
-								type="text"
-								name="time_format"
-								class="input input-sm w-full font-mono text-xs"
-								value="%H:%M"
-							/>
-						</fieldset>
-						<fieldset class="fieldset">
-							<legend class="fieldset-legend">Priority</legend>
-							<input type="number" name="priority" class="input input-sm w-full" value="0" />
-						</fieldset>
-					</div>
-				</div>
-
-				<div class="modal-action">
-					<button type="button" class="btn btn-ghost" on:click={() => (showAddRuleModal = false)}>
-						Cancel
-					</button>
-					<button type="submit" class="btn btn-primary">Create Rule</button>
-				</div>
-			</form>
-		</div>
-		<form method="dialog" class="modal-backdrop">
-			<button on:click={() => (showAddRuleModal = false)}>close</button>
-		</form>
-	</dialog>
-{/if}

@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-import type { Flight, FlightGroup, EmailAccount, AirlineRule, FlightStats } from '$lib/types';
+import type { Flight, FlightGroup, EmailAccount, FlightStats } from '$lib/types';
 import { fetchCSRFToken } from '$lib/index.server';
 
 const PUBLIC_SERVER_URL = process.env['PUBLIC_SERVER_URL'];
@@ -17,20 +17,17 @@ export const load: PageServerLoad = async (event) => {
 
 	const headers = { Cookie: `sessionid=${sessionId}` };
 
-	// Fetch flights, email accounts, airline rules, and stats in parallel
-	const [flightsRes, emailAccountsRes, airlineRulesRes, statsRes, flightGroupsRes] =
-		await Promise.all([
-			fetch(`${endpoint}/api/flights/flights/`, { headers }),
-			fetch(`${endpoint}/api/flights/email-accounts/`, { headers }),
-			fetch(`${endpoint}/api/flights/airline-rules/`, { headers }),
-			fetch(`${endpoint}/api/flights/flights/stats/`, { headers }),
-			fetch(`${endpoint}/api/flights/flight-groups/`, { headers })
-		]);
+	// Fetch flights, email accounts, and stats in parallel (no airline-rules endpoint)
+	const [flightsRes, emailAccountsRes, statsRes, flightGroupsRes] = await Promise.all([
+		fetch(`${endpoint}/api/flights/flights/`, { headers }),
+		fetch(`${endpoint}/api/flights/email-accounts/`, { headers }),
+		fetch(`${endpoint}/api/flights/flights/stats/`, { headers }),
+		fetch(`${endpoint}/api/flights/flight-groups/`, { headers })
+	]);
 
 	let flights: Flight[] = [];
 	let flightGroups: FlightGroup[] = [];
 	let emailAccounts: EmailAccount[] = [];
-	let airlineRules: AirlineRule[] = [];
 	let stats: FlightStats | null = null;
 
 	if (flightsRes.ok) {
@@ -45,10 +42,6 @@ export const load: PageServerLoad = async (event) => {
 		const data = await emailAccountsRes.json();
 		emailAccounts = data.results ?? data;
 	}
-	if (airlineRulesRes.ok) {
-		const data = await airlineRulesRes.json();
-		airlineRules = data.results ?? data;
-	}
 	if (statsRes.ok) {
 		stats = await statsRes.json();
 	}
@@ -58,7 +51,6 @@ export const load: PageServerLoad = async (event) => {
 			flights,
 			flightGroups,
 			emailAccounts,
-			airlineRules,
 			stats
 		}
 	};
@@ -222,86 +214,6 @@ export const actions: Actions = {
 			return { success: false };
 		}
 		return { success: true };
-	},
-
-	// Create an airline rule
-	createAirlineRule: async (event) => {
-		const sessionId = event.cookies.get('sessionid');
-		const csrfToken = await fetchCSRFToken();
-		const formData = await event.request.formData();
-
-		const body = {
-			airline_name: formData.get('airline_name'),
-			airline_code: formData.get('airline_code') || '',
-			sender_pattern: formData.get('sender_pattern'),
-			subject_pattern: formData.get('subject_pattern') || '',
-			body_pattern: formData.get('body_pattern'),
-			date_format: formData.get('date_format') || '%d %b %Y',
-			time_format: formData.get('time_format') || '%H:%M',
-			is_active: true,
-			priority: parseInt(formData.get('priority')?.toString() || '0')
-		};
-
-		const res = await fetch(`${endpoint}/api/flights/airline-rules/`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				Cookie: `csrftoken=${csrfToken}; sessionid=${sessionId}`,
-				'X-CSRFToken': csrfToken,
-				Referer: event.url.origin
-			},
-			body: JSON.stringify(body)
-		});
-
-		if (!res.ok) {
-			const error = await res.json();
-			return { success: false, error };
-		}
-		return { success: true };
-	},
-
-	// Delete an airline rule
-	deleteAirlineRule: async (event) => {
-		const sessionId = event.cookies.get('sessionid');
-		const csrfToken = await fetchCSRFToken();
-		const formData = await event.request.formData();
-		const id = formData.get('id');
-
-		const res = await fetch(`${endpoint}/api/flights/airline-rules/${id}/`, {
-			method: 'DELETE',
-			headers: {
-				Cookie: `csrftoken=${csrfToken}; sessionid=${sessionId}`,
-				'X-CSRFToken': csrfToken,
-				Referer: event.url.origin
-			}
-		});
-
-		if (!res.ok) {
-			const error = await res.json();
-			return { success: false, error };
-		}
-		return { success: true };
-	},
-
-	// Auto-group flights into trips
-	autoGroupFlights: async (event) => {
-		const sessionId = event.cookies.get('sessionid');
-		const csrfToken = await fetchCSRFToken();
-
-		const res = await fetch(`${endpoint}/api/flights/flight-groups/auto-group/`, {
-			method: 'POST',
-			headers: {
-				Cookie: `csrftoken=${csrfToken}; sessionid=${sessionId}`,
-				'X-CSRFToken': csrfToken,
-				Referer: event.url.origin
-			}
-		});
-
-		const data = await res.json();
-		if (!res.ok) {
-			return { success: false, error: data };
-		}
-		return { success: true, groupResult: data };
 	},
 
 	// Delete a flight group
