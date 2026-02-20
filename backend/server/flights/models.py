@@ -6,6 +6,40 @@ from django.core.validators import MinValueValidator
 User = get_user_model()
 
 
+def _find_trip_destination(flights, origin: str) -> str:
+    """
+    Determine the main destination of a trip.
+
+    For a one-way trip (ARN → FRA → GRU), returns the last arrival (GRU).
+    For a round-trip (ARN → FRA → GRU → ... → FRA → ARN), returns the
+    first "real destination" — the arrival airport of the first flight
+    followed by a stay of 24 h or more (i.e. not a short connection).
+    Falls back to the midpoint flight's arrival airport.
+    """
+    from datetime import timedelta as _td
+
+    if not flights:
+        return origin
+
+    last_arrival = flights[-1].arrival_airport
+
+    # One-way (possibly with connections): destination is the last arrival.
+    if last_arrival != origin:
+        return last_arrival
+
+    # Round-trip: find the first real destination stay (gap >= 24 h).
+    _CONNECTION_THRESHOLD = _td(hours=24)
+    for i in range(len(flights) - 1):
+        gap = flights[i + 1].departure_datetime - flights[i].arrival_datetime
+        if gap >= _CONNECTION_THRESHOLD and flights[i].arrival_airport != origin:
+            return flights[i].arrival_airport
+
+    # Fallback: use the midpoint flight's arrival.
+    mid = (len(flights) - 1) // 2
+    arr = flights[mid].arrival_airport
+    return arr if arr != origin else flights[0].arrival_airport
+
+
 class FlightGroup(models.Model):
     """
     Groups related flights into a trip (like TripIt).
@@ -50,14 +84,8 @@ class FlightGroup(models.Model):
         flights = list(self.flights.order_by('departure_datetime'))
         if not flights:
             return ''
-        # The destination is typically the arrival of the last outbound leg
-        # before the return journey starts
         origin = flights[0].departure_airport
-        dest = flights[-1].arrival_airport
-        for f in flights:
-            if f.arrival_airport != origin:
-                dest = f.arrival_airport
-        return dest
+        return _find_trip_destination(flights, origin)
 
 
 class EmailAccount(models.Model):
@@ -276,7 +304,7 @@ class Flight(models.Model):
         if self.departure_datetime and self.arrival_datetime and not self.duration_minutes:
             delta = self.arrival_datetime - self.departure_datetime
             self.duration_minutes = max(int(delta.total_seconds() / 60), 1)
-        # Auto-compute status based on arrival time; never override a manual 'cancelled'
+            # Auto-compute status based on arrival time; never override a manual 'cancelled'
         if self.status != 'cancelled' and self.arrival_datetime:
             from django.utils import timezone as _tz
             self.status = 'completed' if self.arrival_datetime < _tz.now() else 'upcoming'

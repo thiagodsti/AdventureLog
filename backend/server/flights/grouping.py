@@ -99,13 +99,12 @@ def _create_group_for_flights(user, flights: list[Flight], booking_ref: str = ''
     first = sorted_flights[0]
     last = sorted_flights[-1]
 
-    # Determine the "destination" — farthest point from origin
+    # Determine the "destination" — the turnaround point of the trip.
+    # For one-way (ARN→FRA→GRU): last arrival (GRU).
+    # For round-trip (ARN→FRA→GRU→FRA→ARN): the farthest point before
+    # the traveller starts heading back toward the origin.
     origin = first.departure_airport
-    destination = last.arrival_airport
-    for f in sorted_flights:
-        if f.arrival_airport != origin:
-            destination = f.arrival_airport
-            break
+    destination = _find_trip_destination(sorted_flights, origin)
 
     # Build a nice name
     origin_name = first.departure_city or first.departure_airport
@@ -139,6 +138,38 @@ def _get_city_for_airport(flights: list[Flight], airport_code: str) -> str:
         if f.arrival_airport == airport_code and f.arrival_city:
             return f.arrival_city
     return ''
+
+
+def _find_trip_destination(flights: list[Flight], origin: str) -> str:
+    """
+    Determine the main destination of a trip.
+
+    For a one-way trip (ARN → FRA → GRU), returns the last arrival (GRU).
+    For a round-trip (ARN → FRA → GRU → ... → FRA → ARN), returns the
+    first "real destination" — the arrival airport of the first flight
+    followed by a stay of 24 h or more (i.e. not a short connection).
+    Falls back to the midpoint flight's arrival airport.
+    """
+    if not flights:
+        return origin
+
+    last_arrival = flights[-1].arrival_airport
+
+    # One-way (possibly with connections): destination is the last arrival.
+    if last_arrival != origin:
+        return last_arrival
+
+    # Round-trip: find the first real destination stay (gap >= 24 h).
+    _CONNECTION_THRESHOLD = timedelta(hours=24)
+    for i in range(len(flights) - 1):
+        gap = flights[i + 1].departure_datetime - flights[i].arrival_datetime
+        if gap >= _CONNECTION_THRESHOLD and flights[i].arrival_airport != origin:
+            return flights[i].arrival_airport
+
+    # Fallback: use the midpoint flight's arrival.
+    mid = (len(flights) - 1) // 2
+    arr = flights[mid].arrival_airport
+    return arr if arr != origin else flights[0].arrival_airport
 
 
 def _group_by_proximity(flights: list[Flight], max_gap: timedelta) -> list[list[Flight]]:
@@ -212,11 +243,7 @@ def _merge_overlapping_groups(user, max_gap: timedelta) -> int:
                     all_flights = list(g1.flights.order_by('departure_datetime'))
                     first = all_flights[0]
                     origin = first.departure_airport
-                    destination = first.arrival_airport
-                    for f in all_flights:
-                        if f.arrival_airport != origin:
-                            destination = f.arrival_airport
-                            break
+                    destination = _find_trip_destination(all_flights, origin)
                     dest_name = _get_city_for_airport(all_flights, destination) or destination
                     origin_name = first.departure_city or origin
                     date_str = first.departure_datetime.strftime('%b %Y')

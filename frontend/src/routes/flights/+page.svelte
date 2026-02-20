@@ -297,6 +297,21 @@
 				</div>
 			</div>
 			<div class="flex gap-2">
+				<form
+					method="POST"
+					action="?/autoGroupFlights"
+					use:enhance={() => {
+						return async ({ update }) => {
+							await update();
+							const res = await invalidateAll();
+							flightGroups = data.props.flightGroups;
+						};
+					}}
+				>
+					<button class="btn btn-outline btn-sm" type="submit">
+						<Sync /> Auto-group
+					</button>
+				</form>
 				<button class="btn btn-primary btn-sm" on:click={() => (showAddFlightModal = true)}>
 					<Plus /> Add Flight
 				</button>

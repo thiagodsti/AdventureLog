@@ -259,6 +259,27 @@ export const actions: Actions = {
 		return { success: true };
 	},
 
+	// Auto-group ungrouped flights into trips
+	autoGroupFlights: async (event) => {
+		const sessionId = event.cookies.get('sessionid');
+		const csrfToken = await fetchCSRFToken();
+
+		const res = await fetch(`${endpoint}/api/flights/flight-groups/auto-group/`, {
+			method: 'POST',
+			headers: {
+				Cookie: `csrftoken=${csrfToken}; sessionid=${sessionId}`,
+				'X-CSRFToken': csrfToken,
+				Referer: event.url.origin
+			}
+		});
+
+		if (!res.ok) {
+			return { success: false };
+		}
+		const result = await res.json();
+		return { success: true, ...result };
+	},
+
 	// Delete a flight group
 	deleteFlightGroup: async (event) => {
 		const sessionId = event.cookies.get('sessionid');
