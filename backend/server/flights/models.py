@@ -95,6 +95,10 @@ class EmailAccount(models.Model):
 
     is_active = models.BooleanField(default=True)
     last_synced_at = models.DateTimeField(null=True, blank=True)
+    last_rules_version = models.CharField(
+        max_length=20, blank=True, default='',
+        help_text="Tracks which RULES_VERSION was last used for syncing"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -262,7 +266,7 @@ class Flight(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-departure_datetime']
+        ordering = ['departure_datetime']
         unique_together = [('user', 'email_message_id')]
 
     def __str__(self):

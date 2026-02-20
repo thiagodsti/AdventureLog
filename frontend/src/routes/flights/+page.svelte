@@ -30,25 +30,66 @@
 	let showAddEmailModal = false;
 	let syncing: string | null = null;
 	let expandedGroups: Set<string> = new Set();
+	let connectionTested = false;
+	let testingConnection = false;
+	let connectionTestMessage = '';
 
-	$: upcomingFlights = flights.filter((f) => f.status === 'upcoming');
-	$: historyFlights = flights.filter((f) => f.status !== 'upcoming');
+	async function handleTestConnection() {
+		const form = document.querySelector('#emailAccountForm') as HTMLFormElement | null;
+		if (!form) return;
+		const formData = new FormData(form);
+		testingConnection = true;
+		connectionTestMessage = '';
+		try {
+			const res = await fetch('?/testEmailConnection', {
+				method: 'POST',
+				body: formData
+			});
+			const result = await res.json();
+			// SvelteKit form action responses are wrapped in { type, status, data }
+			const actionData = result?.data ? JSON.parse(result.data) : result;
+			// Handle various response shapes from SvelteKit enhance
+			if (actionData?.[0]?.success) {
+				connectionTested = true;
+				connectionTestMessage = actionData[0].message || 'Connection successful!';
+			} else if (actionData?.success) {
+				connectionTested = true;
+				connectionTestMessage = actionData.message || 'Connection successful!';
+			} else {
+				connectionTested = false;
+				connectionTestMessage = actionData?.[0]?.error || actionData?.error || 'Connection failed. Please check your settings.';
+			}
+		} catch (e) {
+			connectionTested = false;
+			connectionTestMessage = 'Connection test failed. Please check your settings.';
+		} finally {
+			testingConnection = false;
+		}
+	}
+
+	$: upcomingFlights = flights
+		.filter((f) => f.status === 'upcoming')
+		.sort((a, b) => new Date(a.departure_datetime).getTime() - new Date(b.departure_datetime).getTime());
+	$: historyFlights = flights
+		.filter((f) => f.status !== 'upcoming')
+		.sort((a, b) => new Date(b.departure_datetime).getTime() - new Date(a.departure_datetime).getTime());
 	$: displayedFlights = flightView === 'upcoming' ? upcomingFlights : historyFlights;
 
-	$: allSortedGroups = [...flightGroups].sort((a, b) => {
-		const aDate = a.start_date ? new Date(a.start_date).getTime() : 0;
-		const bDate = b.start_date ? new Date(b.start_date).getTime() : 0;
-		return bDate - aDate;
-	});
-	// Upcoming groups: at least one upcoming flight
-	$: upcomingGroups = allSortedGroups.filter((g) =>
-		g.flights && g.flights.some((f: Flight) => f.status === 'upcoming')
-	);
-	// History groups: all flights are completed/cancelled
-	$: historyGroups = allSortedGroups.filter(
-		(g) => !g.flights || g.flights.every((f: Flight) => f.status !== 'upcoming')
-	);
-	$: sortedGroups = flightView === 'upcoming' ? upcomingGroups : historyGroups;
+	$: upcomingSortedGroups = [...flightGroups]
+		.filter((g) => g.flights && g.flights.some((f: Flight) => f.status === 'upcoming'))
+		.sort((a, b) => {
+			const aDate = a.start_date ? new Date(a.start_date).getTime() : 0;
+			const bDate = b.start_date ? new Date(b.start_date).getTime() : 0;
+			return aDate - bDate; // Soonest trip first
+		});
+	$: historySortedGroups = [...flightGroups]
+		.filter((g) => !g.flights || g.flights.every((f: Flight) => f.status !== 'upcoming'))
+		.sort((a, b) => {
+			const aDate = a.start_date ? new Date(a.start_date).getTime() : 0;
+			const bDate = b.start_date ? new Date(b.start_date).getTime() : 0;
+			return bDate - aDate; // Most recent first
+		});
+	$: sortedGroups = flightView === 'upcoming' ? upcomingSortedGroups : historySortedGroups;
 
 	function toggleGroup(id: string) {
 		if (expandedGroups.has(id)) {
@@ -102,6 +143,46 @@
 			default:
 				return 'badge-ghost';
 		}
+	}
+
+	/**
+	 * Group sorted flights into journey legs.
+	 * Consecutive flights with < 24h gap (arrival → next departure) are in the same leg.
+	 */
+	function groupIntoLegs(sortedFlights: Flight[]): Flight[][] {
+		if (sortedFlights.length === 0) return [];
+		const legs: Flight[][] = [[sortedFlights[0]]];
+		for (let i = 1; i < sortedFlights.length; i++) {
+			const prevArrival = new Date(sortedFlights[i - 1].arrival_datetime).getTime();
+			const currDeparture = new Date(sortedFlights[i].departure_datetime).getTime();
+			const gapHours = (currDeparture - prevArrival) / (1000 * 60 * 60);
+			if (gapHours >= 0 && gapHours <= 24) {
+				legs[legs.length - 1].push(sortedFlights[i]);
+			} else {
+				legs.push([sortedFlights[i]]);
+			}
+		}
+		return legs;
+	}
+
+	/** Build a route summary string for a leg, e.g. "ARN → FRA (4h) → GRU" */
+	function legRouteSummary(leg: Flight[]): string {
+		if (leg.length === 0) return '';
+		let route = leg[0].departure_airport;
+		for (let i = 0; i < leg.length; i++) {
+			if (i > 0) {
+				// Add layover duration between previous arrival and this departure
+				const prevArrival = new Date(leg[i - 1].arrival_datetime).getTime();
+				const currDeparture = new Date(leg[i].departure_datetime).getTime();
+				const gapMs = currDeparture - prevArrival;
+				const gapHours = Math.floor(gapMs / (1000 * 60 * 60));
+				const gapMinutes = Math.round((gapMs % (1000 * 60 * 60)) / (1000 * 60));
+				const layoverStr = gapMinutes > 0 ? `${gapHours}h${gapMinutes}m` : `${gapHours}h`;
+				route += ` (${layoverStr} layover)`;
+			}
+			route += ` → ${leg[i].arrival_airport}`;
+		}
+		return route;
 	}
 
 	function cabinLabel(cabin: string): string {
@@ -251,36 +332,19 @@
 								class="card-body p-4 sm:p-5 cursor-pointer hover:bg-base-200/50 transition-colors"
 								on:click={() => toggleGroup(group.id)}
 							>
-								<div class="flex flex-col sm:flex-row sm:items-center gap-3">
-									<!-- Route Summary -->
-									<div class="flex items-center gap-3 grow">
-										<div class="text-center min-w-[50px]">
-											<div class="font-bold text-2xl text-primary">{group.origin || '—'}</div>
-										</div>
-										<div class="flex-1 flex flex-col items-center">
-											<div class="w-full flex items-center gap-1">
-												<AirplaneTakeoff class="text-primary text-sm" />
-												<div class="h-px bg-base-300 flex-1"></div>
-												<div class="badge badge-sm badge-outline">{group.flight_count} flight{group.flight_count !== 1 ? 's' : ''}</div>
-												<div class="h-px bg-base-300 flex-1"></div>
-												<AirplaneLanding class="text-primary text-sm" />
-											</div>
-										</div>
-										<div class="text-center min-w-[50px]">
-											<div class="font-bold text-2xl text-primary">{group.destination || '—'}</div>
-										</div>
-									</div>
-
-									<!-- Trip Info -->
-									<div class="flex flex-wrap gap-3 text-sm text-base-content/60 min-w-[200px]">
-										{#if group.start_date}
-											<div class="flex items-center gap-1">
-												<Clock class="text-xs" />
-												{formatDate(group.start_date)}
-											</div>
-										{/if}
-										<div class="font-medium text-base-content/80 text-xs">
-											{group.name}
+								<div class="flex items-center gap-3">
+									<div class="grow">
+										<div class="font-bold text-lg">{group.name}</div>
+										<div class="text-sm text-base-content/60 flex flex-wrap items-center gap-2">
+											{#if group.start_date}
+												<span class="flex items-center gap-1">
+													<Clock class="text-xs" />
+													{formatDate(group.start_date)}
+												</span>
+											{/if}
+											<span class="badge badge-sm badge-outline">
+												{group.flight_count} flight{group.flight_count !== 1 ? 's' : ''}
+											</span>
 										</div>
 									</div>
 
@@ -291,98 +355,115 @@
 								</div>
 							</div>
 
-							<!-- Expanded: Flight list -->
+							<!-- Expanded: Flight list grouped by journey legs -->
 							{#if isExpanded}
 								<div class="border-t border-base-200">
-									<div class="p-3 sm:p-4 grid gap-3">
-										{#each groupFlights as flight, i}
-											<div class="flex flex-col lg:flex-row lg:items-center gap-3 p-3 bg-base-200/30 rounded-box">
-												<!-- Flight number & airline -->
-												<div class="min-w-[120px]">
-													<div class="font-bold">{flight.flight_number}</div>
-													<div class="text-xs text-base-content/60">
-														{flight.airline_name || flight.airline_code || ''}
-													</div>
-													<span class="badge {statusBadgeClass(flight.status)} badge-xs mt-1">
-														{flight.status}
-													</span>
-												</div>
-
-												<!-- Route -->
-												<div class="flex items-center gap-2 grow">
-													<div class="text-center">
-														<div class="font-bold text-lg">{flight.departure_airport}</div>
-														<div class="text-xs text-base-content/50">{flight.departure_city}</div>
-														<div class="text-xs text-base-content/60">{formatDateTime(flight.departure_datetime)}</div>
-													</div>
-													<div class="flex-1 flex flex-col items-center">
-														<div class="text-xs text-base-content/40">
-															{formatDuration(flight.duration_minutes)}
-														</div>
-														<div class="w-full flex items-center gap-1">
-															<div class="h-px bg-base-300 flex-1"></div>
-															<Airplane class="text-primary text-sm" />
-															<div class="h-px bg-base-300 flex-1"></div>
-														</div>
-													</div>
-													<div class="text-center">
-														<div class="font-bold text-lg">{flight.arrival_airport}</div>
-														<div class="text-xs text-base-content/50">{flight.arrival_city}</div>
-														<div class="text-xs text-base-content/60">{formatDateTime(flight.arrival_datetime)}</div>
-													</div>
-												</div>
-
-												<!-- Details -->
-												<div class="flex flex-wrap gap-2 text-xs text-base-content/60 min-w-[100px]">
-													{#if flight.booking_reference}
-														<div class="flex items-center gap-1">
-															<Ticket class="text-xs" />{flight.booking_reference}
-														</div>
-													{/if}
-													{#if flight.seat}
-														<div class="flex items-center gap-1">
-															<SeatRecline class="text-xs" />{flight.seat}
-														</div>
-													{/if}
-													{#if flight.cabin_class}
-														<div>{cabinLabel(flight.cabin_class)}</div>
-													{/if}
-												</div>
-
-												<!-- Delete -->
-												<form
-													method="POST"
-													action="?/deleteFlight"
-													use:enhance={() => {
-														return async ({ result }) => {
-															if (result.type === 'success') {
-																await invalidateAll();
-																flights = data.props.flights;
-																flightGroups = data.props.flightGroups;
-																stats = data.props.stats;
-															}
-														};
-													}}
-												>
-													<input type="hidden" name="id" value={flight.id} />
-													<button class="btn btn-ghost btn-xs btn-square" title="Delete flight">
-														<Delete class="text-error" />
-													</button>
-												</form>
+									<div class="p-3 sm:p-4 grid gap-4">
+										{#each groupIntoLegs(groupFlights) as leg, legIdx}
+											<!-- Journey leg route summary -->
+											<div class="flex items-center gap-2 text-sm font-semibold text-primary">
+												<Airplane class="text-xs" />
+												<span>{legRouteSummary(leg)}</span>
 											</div>
 
-											{#if i < groupFlights.length - 1}
-												{@const gap = new Date(groupFlights[i + 1].departure_datetime).getTime() - new Date(flight.arrival_datetime).getTime()}
-												{@const gapHours = Math.round(gap / (1000 * 60 * 60))}
-												{#if gapHours > 0}
-													<div class="flex items-center gap-2 px-4 py-1">
-														<div class="h-px bg-base-300 flex-1"></div>
-														<span class="text-xs text-base-content/30">
-															{gapHours >= 24 ? `${Math.floor(gapHours / 24)}d ${gapHours % 24}h` : `${gapHours}h`} layover
+											<!-- Individual flights within this leg -->
+											{#each leg as flight, i}
+												<div class="flex flex-col lg:flex-row lg:items-center gap-3 p-3 bg-base-200/30 rounded-box ml-4">
+													<!-- Flight number & airline -->
+													<div class="min-w-[120px]">
+														<div class="font-bold">{flight.flight_number}</div>
+														<div class="text-xs text-base-content/60">
+															{flight.airline_name || flight.airline_code || ''}
+														</div>
+														<span class="badge {statusBadgeClass(flight.status)} badge-xs mt-1">
+															{flight.status}
 														</span>
-														<div class="h-px bg-base-300 flex-1"></div>
 													</div>
+
+													<!-- Route -->
+													<div class="flex items-center gap-2 grow">
+														<div class="text-center">
+															<div class="font-bold text-lg">{flight.departure_airport}</div>
+															<div class="text-xs text-base-content/50">{flight.departure_city}</div>
+															<div class="text-xs text-base-content/60">{formatDateTime(flight.departure_datetime)}</div>
+														</div>
+														<div class="flex-1 flex flex-col items-center">
+															<div class="text-xs text-base-content/40">
+																{formatDuration(flight.duration_minutes)}
+															</div>
+															<div class="w-full flex items-center gap-1">
+																<div class="h-px bg-base-300 flex-1"></div>
+																<Airplane class="text-primary text-sm" />
+																<div class="h-px bg-base-300 flex-1"></div>
+															</div>
+														</div>
+														<div class="text-center">
+															<div class="font-bold text-lg">{flight.arrival_airport}</div>
+															<div class="text-xs text-base-content/50">{flight.arrival_city}</div>
+															<div class="text-xs text-base-content/60">{formatDateTime(flight.arrival_datetime)}</div>
+														</div>
+													</div>
+
+													<!-- Details -->
+													<div class="flex flex-wrap gap-2 text-xs text-base-content/60 min-w-[100px]">
+														{#if flight.booking_reference}
+															<div class="flex items-center gap-1">
+																<Ticket class="text-xs" />{flight.booking_reference}
+															</div>
+														{/if}
+														{#if flight.seat}
+															<div class="flex items-center gap-1">
+																<SeatRecline class="text-xs" />{flight.seat}
+															</div>
+														{/if}
+														{#if flight.cabin_class}
+															<div>{cabinLabel(flight.cabin_class)}</div>
+														{/if}
+													</div>
+
+													<!-- Delete -->
+													<form
+														method="POST"
+														action="?/deleteFlight"
+														use:enhance={() => {
+															return async ({ result }) => {
+																if (result.type === 'success') {
+																	await invalidateAll();
+																	flights = data.props.flights;
+																	flightGroups = data.props.flightGroups;
+																	stats = data.props.stats;
+																}
+															};
+														}}
+													>
+														<input type="hidden" name="id" value={flight.id} />
+														<button class="btn btn-ghost btn-xs btn-square" title="Delete flight">
+															<Delete class="text-error" />
+														</button>
+													</form>
+												</div>
+
+												<!-- Layover indicator within the same leg -->
+												{#if i < leg.length - 1}
+													{@const gap = new Date(leg[i + 1].departure_datetime).getTime() - new Date(flight.arrival_datetime).getTime()}
+													{@const gapHours = Math.floor(gap / (1000 * 60 * 60))}
+													{@const gapMinutes = Math.round((gap % (1000 * 60 * 60)) / (1000 * 60))}
+													{#if gapHours > 0 || gapMinutes > 0}
+														<div class="flex items-center gap-2 px-4 py-1 ml-4">
+															<div class="h-px bg-base-300 flex-1"></div>
+															<span class="text-xs text-base-content/30 flex items-center gap-1">
+																<Clock class="text-xs" />
+																{gapMinutes > 0 ? `${gapHours}h ${gapMinutes}m` : `${gapHours}h`} layover in {flight.arrival_airport}
+															</span>
+															<div class="h-px bg-base-300 flex-1"></div>
+														</div>
+													{/if}
 												{/if}
+											{/each}
+
+											<!-- Separator between legs -->
+											{#if legIdx < groupIntoLegs(groupFlights).length - 1}
+												<div class="divider my-0"></div>
 											{/if}
 										{/each}
 									</div>
@@ -857,17 +938,21 @@
 		<div class="modal-box max-w-lg">
 			<h3 class="font-bold text-lg mb-4">Connect Email Account</h3>
 			<form
+				id="emailAccountForm"
 				method="POST"
 				action="?/createEmailAccount"
 				use:enhance={() => {
 					return async ({ result }) => {
 						if (result.type === 'success') {
 							showAddEmailModal = false;
+							connectionTested = false;
+							connectionTestMessage = '';
 							await invalidateAll();
 							emailAccounts = data.props.emailAccounts;
 						}
 					};
 				}}
+				on:input={() => { connectionTested = false; connectionTestMessage = ''; }}
 			>
 				<div class="flex flex-col gap-4">
 					<fieldset class="fieldset">
@@ -892,7 +977,9 @@
 					</fieldset>
 					<fieldset class="fieldset">
 						<legend class="fieldset-legend">Provider *</legend>
-						<select name="provider" class="select select-sm w-full" id="emailProvider">
+						<select name="provider" class="select select-sm w-full" id="emailProvider"
+							on:change={() => { connectionTested = false; connectionTestMessage = ''; }}
+						>
 							<option value="gmail">Gmail (IMAP)</option>
 							<option value="outlook">Outlook (IMAP)</option>
 							<option value="imap">Generic IMAP</option>
@@ -967,18 +1054,37 @@
 							placeholder="Tuta password"
 						/>
 					</fieldset>
+
+					<!-- Test connection result -->
+					{#if connectionTestMessage}
+						<div class="alert {connectionTested ? 'alert-success' : 'alert-error'} py-2 text-sm">
+							{connectionTestMessage}
+						</div>
+					{/if}
 				</div>
 
 				<div class="modal-action">
-					<button type="button" class="btn btn-ghost" on:click={() => (showAddEmailModal = false)}>
+					<button type="button" class="btn btn-ghost" on:click={() => { showAddEmailModal = false; connectionTested = false; connectionTestMessage = ''; }}>
 						Cancel
 					</button>
-					<button type="submit" class="btn btn-primary">Connect</button>
+					<button
+						type="button"
+						class="btn btn-outline btn-info"
+						disabled={testingConnection}
+						on:click={handleTestConnection}
+					>
+						{#if testingConnection}
+							<Sync class="animate-spin" /> Testing...
+						{:else}
+							Test Connection
+						{/if}
+					</button>
+					<button type="submit" class="btn btn-primary" disabled={!connectionTested}>Connect</button>
 				</div>
 			</form>
 		</div>
 		<form method="dialog" class="modal-backdrop">
-			<button on:click={() => (showAddEmailModal = false)}>close</button>
+			<button on:click={() => { showAddEmailModal = false; connectionTested = false; connectionTestMessage = ''; }}>close</button>
 		</form>
 	</dialog>
 {/if}

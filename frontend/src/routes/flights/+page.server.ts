@@ -57,6 +57,49 @@ export const load: PageServerLoad = async (event) => {
 };
 
 export const actions: Actions = {
+	// Test email connection with raw credentials (before saving)
+	testEmailConnection: async (event) => {
+		const sessionId = event.cookies.get('sessionid');
+		const csrfToken = await fetchCSRFToken();
+		const formData = await event.request.formData();
+
+		const provider = formData.get('provider');
+		const body: Record<string, unknown> = {
+			email_address: formData.get('email_address'),
+			provider
+		};
+
+		if (provider === 'gmail' || provider === 'outlook' || provider === 'imap') {
+			if (provider === 'imap') {
+				body.imap_host = formData.get('imap_host') || '';
+			}
+			body.imap_port = parseInt(formData.get('imap_port')?.toString() || '993');
+			body.imap_username = formData.get('imap_username') || '';
+			body.imap_password = formData.get('imap_password') || '';
+			body.use_ssl = formData.get('use_ssl') === 'on';
+		} else if (provider === 'tuta') {
+			body.tuta_user = formData.get('tuta_user') || '';
+			body.tuta_password = formData.get('tuta_password') || '';
+		}
+
+		const res = await fetch(`${endpoint}/api/flights/email-accounts/test-connection/`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				Cookie: `csrftoken=${csrfToken}; sessionid=${sessionId}`,
+				'X-CSRFToken': csrfToken,
+				Referer: event.url.origin
+			},
+			body: JSON.stringify(body)
+		});
+
+		const data = await res.json();
+		if (!res.ok) {
+			return { success: false, error: data.error || 'Connection failed' };
+		}
+		return { success: true, message: data.status || 'Connection successful' };
+	},
+
 	// Create a new email account
 	createEmailAccount: async (event) => {
 		const sessionId = event.cookies.get('sessionid');

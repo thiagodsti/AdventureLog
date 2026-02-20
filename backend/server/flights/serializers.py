@@ -151,6 +151,7 @@ class FlightGroupSerializer(CustomModelSerializer):
     origin = serializers.CharField(read_only=True)
     destination = serializers.CharField(read_only=True)
     flight_count = serializers.SerializerMethodField()
+    route_stops = serializers.SerializerMethodField()
 
     class Meta:
         model = FlightGroup
@@ -158,12 +159,24 @@ class FlightGroupSerializer(CustomModelSerializer):
             'id', 'name', 'description', 'is_auto_generated',
             'flights', 'flight_count',
             'start_date', 'end_date', 'origin', 'destination',
+            'route_stops',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'is_auto_generated']
 
     def get_flight_count(self, obj):
         return obj.flights.count()
+
+    def get_route_stops(self, obj):
+        """Return ordered list of airport codes representing the full route."""
+        flights = list(obj.flights.order_by('departure_datetime'))
+        if not flights:
+            return []
+        stops = [flights[0].departure_airport]
+        for f in flights:
+            if f.arrival_airport and f.arrival_airport != stops[-1]:
+                stops.append(f.arrival_airport)
+        return stops
 
 
 class FlightGroupWriteSerializer(CustomModelSerializer):

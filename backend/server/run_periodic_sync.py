@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
 Periodic sync runner for AdventureLog.
-Runs sync_visited_regions management command every 60 seconds.
+Runs two periodic tasks:
+  1. sync_visited_regions — once daily at midnight
+  2. sync_flight_emails — every 10 minutes
 Managed by supervisord to ensure it inherits container environment variables.
 """
 import os
 import sys
-import time
 import logging
 import signal
 import threading
@@ -30,7 +31,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-INTERVAL_SECONDS = 60
+FLIGHT_SYNC_INTERVAL = 600  # 10 minutes
 
 # Event used to signal shutdown from signal handlers
 _stop_event = threading.Event()
@@ -51,44 +52,73 @@ def _handle_termination(signum, frame):
     _stop_event.set()
 
 
-def run_sync():
+def run_region_sync():
     """Run the sync_visited_regions command."""
     try:
         logger.info("Running sync_visited_regions...")
         call_command('sync_visited_regions')
-        logger.info("Sync completed successfully")
+        logger.info("Region sync completed successfully")
     except Exception as e:
-        logger.error(f"Sync failed: {e}", exc_info=True)
+        logger.error(f"Region sync failed: {e}", exc_info=True)
+
+
+def run_flight_email_sync():
+    """Run the sync_flight_emails command."""
+    try:
+        logger.info("Running sync_flight_emails...")
+        call_command('sync_flight_emails')
+        logger.info("Flight email sync completed successfully")
+    except Exception as e:
+        logger.error(f"Flight email sync failed: {e}", exc_info=True)
+
+
+def midnight_sync_loop():
+    """Thread: run region sync at midnight daily."""
+    while not _stop_event.is_set():
+        wait_seconds = _seconds_until_next_midnight()
+        hours = wait_seconds / 3600.0
+        logger.info(
+            f"Next region sync in {wait_seconds:.0f}s (~{hours:.2f}h) at midnight"
+        )
+        if _stop_event.wait(wait_seconds):
+            break
+        run_region_sync()
+
+
+def flight_sync_loop():
+    """Thread: run flight email sync every 10 minutes."""
+    # Small initial delay to let the app fully start
+    if _stop_event.wait(30):
+        return
+    while not _stop_event.is_set():
+        run_flight_email_sync()
+        if _stop_event.wait(FLIGHT_SYNC_INTERVAL):
+            break
 
 
 def main():
-    """Main loop - run sync every INTERVAL_SECONDS."""
-    logger.info(f"Starting periodic sync worker for midnight background jobs...")
+    """Start both periodic sync loops in separate threads."""
+    logger.info("Starting periodic sync worker (region@midnight + flights@10min)...")
 
-    # Install signal handlers so supervisord (or other process managers)
-    # can request a clean shutdown using SIGTERM/SIGINT.
     signal.signal(signal.SIGTERM, _handle_termination)
     signal.signal(signal.SIGINT, _handle_termination)
 
+    midnight_thread = threading.Thread(target=midnight_sync_loop, name='midnight-sync', daemon=True)
+    flight_thread = threading.Thread(target=flight_sync_loop, name='flight-sync', daemon=True)
+
+    midnight_thread.start()
+    flight_thread.start()
+
     try:
+        # Block main thread until stop event; check periodically so signals are handled
         while not _stop_event.is_set():
-            # Wait until the next local midnight (or until shutdown)
-            wait_seconds = _seconds_until_next_midnight()
-            hours = wait_seconds / 3600.0
-            logger.info(
-                f"Next sync scheduled in {wait_seconds:.0f}s (~{hours:.2f}h) at UTC midnight"
-            )
-            # Sleep until midnight or until stop event is set
-            if _stop_event.wait(wait_seconds):
-                break
-
-            # It's midnight (or we woke up), run the sync once
-            run_sync()
-
-            # After running at midnight, loop continues to compute next midnight
+            _stop_event.wait(1)
     except Exception:
-        logger.exception("Unexpected error in periodic sync loop")
+        logger.exception("Unexpected error in periodic sync main")
     finally:
+        _stop_event.set()
+        midnight_thread.join(timeout=5)
+        flight_thread.join(timeout=5)
         logger.info("Periodic sync worker exiting")
 
 
@@ -96,7 +126,6 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        # Fallback in case the signal is delivered as KeyboardInterrupt
         logger.info("KeyboardInterrupt received — exiting")
         _stop_event.set()
     except SystemExit:

@@ -670,6 +670,7 @@ export type FlightGroup = {
 	end_date: string | null;
 	origin: string;
 	destination: string;
+	route_stops: string[];
 	created_at: string;
 	updated_at: string;
 };

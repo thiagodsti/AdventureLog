@@ -21,6 +21,11 @@ which inserts newlines after block-level HTML elements.
 
 from dataclasses import dataclass, field
 
+# Increment this version whenever rules are added or modified.
+# When a sync detects a version mismatch, it performs a full rescan
+# instead of an incremental one (deduplication prevents duplicate flights).
+RULES_VERSION = '5'
+
 # ---------------------------------------------------------------------------
 # Flexible date sub-pattern (reusable)
 # Matches: "16 de mar. de 2026", "16 Mar 2026", "Mar 16, 2026", "16/03/2026"
@@ -46,26 +51,19 @@ BUILTIN_AIRLINE_RULES = [
             r'(itinerar|confirm|reserv|booking|e-?ticket|'
             r'compr|viage|viaje|vuelo|voo|trip|travel)'
         ),
+        # body_pattern is a fallback; the custom extractor handles connections.
         'body_pattern': (
-            # Departure: date, time, then airport code in parentheses
-            r'(?P<departure_date>' + _DATE + r')'
-            r'\s+'
-            r'(?P<departure_time>' + _TIME + r')'
-            r'.*?'
+            # Match individual segment: (DEP_AIRPORT) ... flight_number ... (ARR_AIRPORT)
+            # Uses broad airline code match to capture codeshares (LH, SK, etc.)
             r'\((?P<departure_airport>[A-Z]{3})\)'
-            r'.*?'
-            # Flight number (LA, JJ, 4C, 4M prefixes used by LATAM group)
-            r'(?P<flight_number>(?:LA|JJ|4C|4M)\s*\d{3,5})'
-            r'.*?'
-            # Arrival: date, time, then airport code in parentheses
-            r'(?P<arrival_date>' + _DATE + r')'
             r'\s+'
-            r'(?P<arrival_time>' + _TIME + r')'
+            r'(?P<flight_number>[A-Z0-9]{2}\s*\d{3,5})'
             r'.*?'
             r'\((?P<arrival_airport>[A-Z]{3})\)'
         ),
         'date_format': '%d %b %Y',
         'time_format': '%H:%M',
+        'custom_extractor': 'latam',
         'is_active': True,
         'is_builtin': True,
         'priority': 10,
@@ -223,6 +221,7 @@ class BuiltinAirlineRule:
     is_builtin: bool
     priority: int
     subject_pattern: str = ''
+    custom_extractor: str = ''
 
 
 def get_builtin_rules() -> list[BuiltinAirlineRule]:
