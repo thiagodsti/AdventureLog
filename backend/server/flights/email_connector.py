@@ -1,6 +1,6 @@
 """
 Email connection utilities for fetching flight-related emails from various providers.
-Supports IMAP (Gmail, Outlook, generic) and Tuta (placeholder).
+Supports IMAP (Gmail, Outlook, generic).
 """
 
 import imaplib
@@ -230,28 +230,6 @@ def fetch_emails_imap(
     return messages
 
 
-def fetch_emails_tuta(
-    tuta_user: str, tuta_password: str,
-    sender_patterns: list[str] | None = None,
-    since_date: datetime | None = None,
-    max_results: int = 200,
-) -> list[EmailMessage]:
-    """
-    Fetch emails from a Tuta (Tutanota) account.
-
-    NOTE: Tutanota does not provide public IMAP access.
-    This is a placeholder that uses the tutanota-client approach.
-    Full Tuta integration requires their encrypted API which is complex.
-    For now this raises a descriptive error.
-    """
-    raise NotImplementedError(
-        "Tuta (Tutanota) email fetching requires the Tuta API client. "
-        "Tutanota does not support standard IMAP. "
-        "This feature is planned for a future release. "
-        "Please use IMAP-compatible providers (Gmail, Outlook) for now."
-    )
-
-
 def fetch_emails_for_account(email_account, since_date=None, max_results=200) -> list[EmailMessage]:
     """
     High-level function: fetch flight-related emails from an EmailAccount model instance.
@@ -270,14 +248,6 @@ def fetch_emails_for_account(email_account, since_date=None, max_results=200) ->
             username=email_account.imap_username or email_account.email_address,
             password=email_account.imap_password,
             use_ssl=email_account.use_ssl,
-            sender_patterns=sender_patterns if sender_patterns else None,
-            since_date=since_date,
-            max_results=max_results,
-        )
-    elif provider == 'tuta':
-        return fetch_emails_tuta(
-            tuta_user=email_account.tuta_user,
-            tuta_password=email_account.tuta_password,
             sender_patterns=sender_patterns if sender_patterns else None,
             since_date=since_date,
             max_results=max_results,

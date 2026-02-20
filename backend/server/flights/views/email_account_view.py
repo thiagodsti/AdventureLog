@@ -50,11 +50,6 @@ def test_email_connection(request):
                 {'error': f'Connection failed: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-    elif provider == 'tuta':
-        return Response(
-            {'error': 'Tuta connection testing is not yet supported.'},
-            status=status.HTTP_501_NOT_IMPLEMENTED
-        )
     else:
         return Response(
             {'error': f'Unknown provider: {provider}'},
@@ -112,11 +107,6 @@ class EmailAccountViewSet(viewsets.ModelViewSet):
                 )
                 conn.logout()
                 return Response({'status': 'Connection successful'})
-            elif account.provider == 'tuta':
-                return Response(
-                    {'error': 'Tuta connection testing is not yet supported.'},
-                    status=status.HTTP_501_NOT_IMPLEMENTED
-                )
             else:
                 return Response(
                     {'error': f'Unknown provider: {account.provider}'},

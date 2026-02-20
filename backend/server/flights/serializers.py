@@ -11,7 +11,6 @@ class EmailAccountSerializer(CustomModelSerializer):
         fields = [
             'id', 'name', 'email_address', 'provider',
             'imap_host', 'imap_port', 'imap_username', 'use_ssl',
-            'tuta_user',
             'is_active', 'last_synced_at',
             'created_at', 'updated_at', 'flight_count',
         ]
@@ -33,13 +32,11 @@ class EmailAccountWriteSerializer(CustomModelSerializer):
         fields = [
             'id', 'name', 'email_address', 'provider',
             'imap_host', 'imap_port', 'imap_username', 'imap_password', 'use_ssl',
-            'tuta_user', 'tuta_password',
             'is_active',
         ]
         read_only_fields = ['id']
         extra_kwargs = {
             'imap_password': {'write_only': True},
-            'tuta_password': {'write_only': True},
         }
 
     def validate(self, attrs):
@@ -57,15 +54,6 @@ class EmailAccountWriteSerializer(CustomModelSerializer):
             if not attrs.get('imap_password') and not getattr(self.instance, 'imap_password', ''):
                 raise serializers.ValidationError(
                     {'imap_password': 'Password/App password is required.'}
-                )
-        elif provider == 'tuta':
-            if not attrs.get('tuta_user') and not getattr(self.instance, 'tuta_user', ''):
-                raise serializers.ValidationError(
-                    {'tuta_user': 'Tuta username is required.'}
-                )
-            if not attrs.get('tuta_password') and not getattr(self.instance, 'tuta_password', ''):
-                raise serializers.ValidationError(
-                    {'tuta_password': 'Tuta password is required.'}
                 )
         return attrs
 

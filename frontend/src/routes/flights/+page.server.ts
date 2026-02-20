@@ -77,9 +77,6 @@ export const actions: Actions = {
 			body.imap_username = formData.get('imap_username') || '';
 			body.imap_password = formData.get('imap_password') || '';
 			body.use_ssl = formData.get('use_ssl') === 'on';
-		} else if (provider === 'tuta') {
-			body.tuta_user = formData.get('tuta_user') || '';
-			body.tuta_password = formData.get('tuta_password') || '';
 		}
 
 		const res = await fetch(`${endpoint}/api/flights/email-accounts/test-connection/`, {
@@ -123,9 +120,6 @@ export const actions: Actions = {
 			body.imap_username = formData.get('imap_username') || '';
 			body.imap_password = formData.get('imap_password') || '';
 			body.use_ssl = formData.get('use_ssl') === 'on';
-		} else if (provider === 'tuta') {
-			body.tuta_user = formData.get('tuta_user') || '';
-			body.tuta_password = formData.get('tuta_password') || '';
 		}
 
 		const res = await fetch(`${endpoint}/api/flights/email-accounts/`, {

@@ -998,7 +998,6 @@
 							<option value="gmail">Gmail (IMAP)</option>
 							<option value="outlook">Outlook (IMAP)</option>
 							<option value="imap">Generic IMAP</option>
-							<option value="tuta">Tuta (Tutanota)</option>
 						</select>
 					</fieldset>
 
@@ -1050,27 +1049,7 @@
 						<span>Use SSL</span>
 					</label>
 
-					<div class="divider my-0">Tuta Settings (if applicable)</div>
-					<fieldset class="fieldset">
-						<legend class="fieldset-legend">Tuta Username</legend>
-						<input
-							type="text"
-							name="tuta_user"
-							class="input input-sm w-full"
-							placeholder="user@tuta.com"
-						/>
-					</fieldset>
-					<fieldset class="fieldset">
-						<legend class="fieldset-legend">Tuta Password</legend>
-						<input
-							type="password"
-							name="tuta_password"
-							class="input input-sm w-full"
-							placeholder="Tuta password"
-						/>
-					</fieldset>
-
-					<!-- Test connection result -->
+						<!-- Test connection result -->
 					{#if connectionTestMessage}
 						<div class="alert {connectionTested ? 'alert-success' : 'alert-error'} py-2 text-sm">
 							{connectionTestMessage}

@@ -91,14 +91,13 @@ class FlightGroup(models.Model):
 class EmailAccount(models.Model):
     """
     Represents a connected email account used to scan for flight emails.
-    Supports IMAP-based providers (Gmail, Outlook, etc.) and Tuta (via API).
+    Supports IMAP-based providers (Gmail, Outlook, etc.).
     """
 
     PROVIDER_CHOICES = [
         ('gmail', 'Gmail (IMAP/OAuth)'),
         ('outlook', 'Outlook (IMAP)'),
         ('imap', 'Generic IMAP'),
-        ('tuta', 'Tuta (Tutanota)'),
     ]
 
     id = models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True)
@@ -116,10 +115,6 @@ class EmailAccount(models.Model):
         help_text="App password or OAuth token for IMAP login"
     )
     use_ssl = models.BooleanField(default=True)
-
-    # Tuta connection settings
-    tuta_user = models.CharField(max_length=255, blank=True, default='')
-    tuta_password = models.CharField(max_length=1024, blank=True, default='')
 
     is_active = models.BooleanField(default=True)
     last_synced_at = models.DateTimeField(null=True, blank=True)

@@ -598,12 +598,11 @@ export type EmailAccount = {
 	id: string;
 	name: string;
 	email_address: string;
-	provider: 'gmail' | 'outlook' | 'imap' | 'tuta';
+	provider: 'gmail' | 'outlook' | 'imap';
 	imap_host: string;
 	imap_port: number;
 	imap_username: string;
 	use_ssl: boolean;
-	tuta_user: string;
 	is_active: boolean;
 	last_synced_at: string | null;
 	created_at: string;
