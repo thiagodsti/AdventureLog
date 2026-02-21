@@ -8,12 +8,15 @@
 	import AirplaneTakeoff from '~icons/mdi/airplane-takeoff';
 	import AirplaneLanding from '~icons/mdi/airplane-landing';
 	import Email from '~icons/mdi/email-outline';
+	import EmailForward from '~icons/mdi/email-fast-outline';
 	import Plus from '~icons/mdi/plus';
 	import Delete from '~icons/mdi/delete-outline';
 	import Sync from '~icons/mdi/sync';
 	import Clock from '~icons/mdi/clock-outline';
 	import SeatRecline from '~icons/mdi/seat-recline-normal';
 	import Ticket from '~icons/mdi/ticket-outline';
+	import ContentCopy from '~icons/mdi/content-copy';
+	import Check from '~icons/mdi/check';
 
 	export let data: any;
 
@@ -21,8 +24,10 @@
 	let flightGroups: FlightGroup[] = data.props.flightGroups;
 	let emailAccounts: EmailAccount[] = data.props.emailAccounts;
 	let stats: FlightStats | null = data.props.stats;
+	let forwardingAddress: { enabled: boolean; address: string | null; domain?: string } = data.props.forwardingAddress;
 
 	let activeTab: 'flights' | 'emails' = 'flights';
+	let copiedForwarding = false;
 	// 'upcoming' shows future flights; 'history' shows completed/cancelled
 	let flightView: 'upcoming' | 'history' = 'upcoming';
 	let viewMode: 'trips' | 'all' = 'trips';
@@ -635,6 +640,41 @@
 
 	<!-- ===================== EMAIL ACCOUNTS TAB ===================== -->
 	{#if activeTab === 'emails'}
+		<!-- Email Forwarding Section -->
+		{#if forwardingAddress.enabled && forwardingAddress.address}
+			<div class="card card-border bg-base-100 shadow-sm mb-6">
+				<div class="card-body p-4">
+					<div class="flex items-center gap-2 mb-2">
+						<EmailForward class="text-primary text-lg" />
+						<h3 class="font-bold">Email Forwarding</h3>
+					</div>
+					<p class="text-sm text-base-content/60 mb-3">
+						Forward flight confirmation emails to this address to automatically import them.
+					</p>
+					<div class="flex items-center gap-2">
+						<code class="bg-base-200 px-3 py-2 rounded-lg text-sm font-mono flex-1">
+							{forwardingAddress.address}
+						</code>
+						<button
+							class="btn btn-ghost btn-sm btn-square"
+							title="Copy address"
+							on:click={() => {
+								navigator.clipboard.writeText(forwardingAddress.address ?? '');
+								copiedForwarding = true;
+								setTimeout(() => (copiedForwarding = false), 2000);
+							}}
+						>
+							{#if copiedForwarding}
+								<Check class="text-success" />
+							{:else}
+								<ContentCopy />
+							{/if}
+						</button>
+					</div>
+				</div>
+			</div>
+		{/if}
+
 		<div class="flex justify-between items-center mb-4">
 			<h2 class="text-lg font-semibold">Connected Email Accounts</h2>
 			<button class="btn btn-primary btn-sm" on:click={() => (showAddEmailModal = true)}>

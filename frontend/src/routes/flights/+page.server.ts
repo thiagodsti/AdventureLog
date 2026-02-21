@@ -17,18 +17,20 @@ export const load: PageServerLoad = async (event) => {
 
 	const headers = { Cookie: `sessionid=${sessionId}` };
 
-	// Fetch flights, email accounts, and stats in parallel (no airline-rules endpoint)
-	const [flightsRes, emailAccountsRes, statsRes, flightGroupsRes] = await Promise.all([
+	// Fetch flights, email accounts, stats, and forwarding address in parallel
+	const [flightsRes, emailAccountsRes, statsRes, flightGroupsRes, forwardingRes] = await Promise.all([
 		fetch(`${endpoint}/api/flights/flights/`, { headers }),
 		fetch(`${endpoint}/api/flights/email-accounts/`, { headers }),
 		fetch(`${endpoint}/api/flights/flights/stats/`, { headers }),
-		fetch(`${endpoint}/api/flights/flight-groups/`, { headers })
+		fetch(`${endpoint}/api/flights/flight-groups/`, { headers }),
+		fetch(`${endpoint}/api/flights/forwarding-address/`, { headers })
 	]);
 
 	let flights: Flight[] = [];
 	let flightGroups: FlightGroup[] = [];
 	let emailAccounts: EmailAccount[] = [];
 	let stats: FlightStats | null = null;
+	let forwardingAddress: { enabled: boolean; address: string | null; domain?: string } = { enabled: false, address: null };
 
 	if (flightsRes.ok) {
 		const data = await flightsRes.json();
@@ -45,13 +47,17 @@ export const load: PageServerLoad = async (event) => {
 	if (statsRes.ok) {
 		stats = await statsRes.json();
 	}
+	if (forwardingRes.ok) {
+		forwardingAddress = await forwardingRes.json();
+	}
 
 	return {
 		props: {
 			flights,
 			flightGroups,
 			emailAccounts,
-			stats
+			stats,
+			forwardingAddress
 		}
 	};
 };

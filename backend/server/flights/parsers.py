@@ -568,7 +568,7 @@ def extract_flights_from_email(email_msg: EmailMessage, rule) -> list[dict]:
     return flights_data
 
 
-def process_email_for_flights(email_msg: EmailMessage, user, email_account: EmailAccount) -> list[Flight]:
+def process_email_for_flights(email_msg: EmailMessage, user, email_account: EmailAccount | None = None) -> list[Flight]:
     """
     Process a single email message: match against rules, extract flights, save to DB.
     Skips duplicates based on email_message_id.

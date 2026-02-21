@@ -67,7 +67,7 @@ RUN chmod +x /code/entrypoint.sh \
 RUN python3 manage.py collectstatic --noinput --verbosity 2
 
 # Expose ports
-EXPOSE 80 8000
+EXPOSE 80 8000 2525
 
 # Start with an entrypoint that runs init tasks then starts supervisord
 ENTRYPOINT ["/code/entrypoint.sh"]

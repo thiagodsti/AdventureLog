@@ -378,3 +378,11 @@ COUNTRY_REGION_JSON_VERSION = 'v3.0'
 GOOGLE_MAPS_API_KEY = getenv('GOOGLE_MAPS_API_KEY', '')
 STRAVA_CLIENT_ID = getenv('STRAVA_CLIENT_ID', '')
 STRAVA_CLIENT_SECRET = getenv('STRAVA_CLIENT_SECRET', '')
+
+# ---------------------------------------------------------------------------
+# Flight Email Forwarding (Inbound SMTP Server)
+# ---------------------------------------------------------------------------
+FLIGHT_SMTP_ENABLED = getenv('FLIGHT_SMTP_ENABLED', 'false').lower() == 'true'
+FLIGHT_SMTP_HOST = getenv('FLIGHT_SMTP_HOST', '0.0.0.0')
+FLIGHT_SMTP_PORT = int(getenv('FLIGHT_SMTP_PORT', '2525'))
+FLIGHT_SMTP_DOMAIN = getenv('FLIGHT_SMTP_DOMAIN', '')

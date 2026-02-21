@@ -1,12 +1,11 @@
 services:
   web:
-    #build: ./frontend/
-    image: ghcr.io/seanmorley15/adventurelog-frontend:latest
+    image: ghcr.io/thiagodsti/adventurelog-frontend:latest
     container_name: adventurelog-frontend
     restart: unless-stopped
     env_file: .env
     ports:
-      - "${FRONTEND_PORT:-8015}:3000"
+      - "8015:3000"
     depends_on:
       - server
 
@@ -16,22 +15,17 @@ services:
     restart: unless-stopped
     env_file: .env
     volumes:
-      - postgres_data:/var/lib/postgresql/data/
+      - /mnt/docker/adventurelog/postgres:/var/lib/postgresql/data
 
   server:
-    #build: ./backend/
-    image: ghcr.io/seanmorley15/adventurelog-backend:latest
+    image: ghcr.io/thiagodsti/adventurelog-backend:latest
     container_name: adventurelog-backend
     restart: unless-stopped
     env_file: .env
     ports:
-      - "${BACKEND_PORT:-8016}:80"
-      - "${FLIGHT_SMTP_PORT:-2525}:2525"
+      - "8016:80"
+      - "2525:2525"
     depends_on:
       - db
     volumes:
-      - adventurelog_media:/code/media/
-
-volumes:
-  postgres_data:
-  adventurelog_media:
+      - /mnt/docker/adventurelog/media:/code/media

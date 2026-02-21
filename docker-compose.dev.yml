@@ -41,6 +41,7 @@ services:
       - DJANGO_SUPERUSER_EMAIL=${DJANGO_ADMIN_EMAIL}
     ports:
       - "${BACKEND_PORT:-8016}:8000"
+      - "${FLIGHT_SMTP_PORT:-2525}:2525"
     depends_on:
       - db
     volumes:
