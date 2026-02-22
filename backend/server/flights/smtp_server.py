@@ -19,7 +19,7 @@ from aiosmtpd.smtp import Envelope, Session, SMTP
 from django.conf import settings
 from django.contrib.auth import get_user_model
 
-from .email_connector import EmailMessage, get_email_body, decode_header_value
+from .email_connector import EmailMessage, get_email_body, get_email_body_and_html, decode_header_value
 from .parsers import process_email_for_flights
 from .grouping import auto_group_flights
 
@@ -135,8 +135,8 @@ class FlightEmailHandler:
                     envelope.content, policy=email.policy.default
                 )
 
-                # Extract email body (handles multipart, HTML-to-text, etc.)
-                body = get_email_body(msg)
+                # Extract email body and raw HTML (for BS4 parsing)
+                body, raw_html = get_email_body_and_html(msg)
                 raw_sender = decode_header_value(msg.get('From', ''))
                 raw_subject = decode_header_value(msg.get('Subject', ''))
 
@@ -166,6 +166,7 @@ class FlightEmailHandler:
                     subject=effective_subject,
                     body=effective_body,
                     date=msg_date,
+                    html_body=raw_html,
                 )
 
                 logger.info(

@@ -9,5 +9,14 @@ export default defineConfig({
 		Icons({
 			compiler: 'svelte'
 		})
-	]
+	],
+	server: {
+		watch: {
+			// Use polling with a longer interval for Docker volume mounts on macOS
+			usePolling: true,
+			interval: 1000,
+			// Ignore heavy directories that don't need watching
+			ignored: ['**/node_modules/**', '**/.git/**']
+		}
+	}
 });

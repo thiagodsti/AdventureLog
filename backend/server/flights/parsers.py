@@ -147,10 +147,19 @@ def _extract_latam_flights(email_msg: EmailMessage, rule) -> list[dict]:
         shared_booking = booking_match.group(1).strip()
 
     shared_passenger = ''
+    # Try "Lista de passageiros" / "Passenger list" pattern first
     passenger_match = re.search(
-        r'(?:Ol[áa]|Hello|Hola)\s+(?:<b[^>]*>)?\s*([A-ZÀ-ÿ][a-zA-ZÀ-ÿ]+)',
+        r'(?:Lista\s+de\s+passageiros|passenger\s*(?:list|name))'
+        r'[\s:]*[-•·]?\s*'
+        r'([A-ZÀ-ÿ][a-zA-ZÀ-ÿ]+(?:\s+[A-ZÀ-ÿ][a-zA-ZÀ-ÿ]+)*)',
         body, re.IGNORECASE,
     )
+    if not passenger_match:
+        # Fall back to greeting pattern
+        passenger_match = re.search(
+            r'(?:Ol[áa]|Hello|Hola)\s+(?:<b[^>]*>)?\s*([A-ZÀ-ÿ][a-zA-ZÀ-ÿ]+)',
+            body, re.IGNORECASE,
+        )
     if passenger_match:
         shared_passenger = passenger_match.group(1).strip()
 
@@ -167,11 +176,20 @@ def _extract_latam_flights(email_msg: EmailMessage, rule) -> list[dict]:
         body, re.IGNORECASE,
     ))
 
-    # If no direction headers found, treat the whole itinerary as one direction
+    # If no direction headers found, try "Trecho N" sections, then fall back
     if not direction_starts:
-        # Fall back: look for "Itinerário" and treat everything after as one block
-        itin_match = re.search(r'Itiner[áa]rio', body, re.IGNORECASE)
-        sections = [body[itin_match.start():] if itin_match else body]
+        # Try "Trecho 1", "Trecho 2", etc.
+        trecho_starts = list(re.finditer(r'Trecho\s+\d+', body, re.IGNORECASE))
+        if trecho_starts:
+            sections = []
+            for i, m in enumerate(trecho_starts):
+                start = m.start()
+                end = trecho_starts[i + 1].start() if i + 1 < len(trecho_starts) else len(body)
+                sections.append(body[start:end])
+        else:
+            # Fall back: look for "Itinerário" and treat everything after as one block
+            itin_match = re.search(r'Itiner[áa]rio', body, re.IGNORECASE)
+            sections = [body[itin_match.start():] if itin_match else body]
     else:
         sections = []
         for i, m in enumerate(direction_starts):
@@ -405,7 +423,14 @@ def extract_flights_from_email(email_msg: EmailMessage, rule) -> list[dict]:
     Rules with a ``custom_extractor`` field use a dedicated parsing function
     instead of the generic regex approach (e.g. LATAM connection handling).
     """
-    # ---- Dispatch to custom extractor if configured ----
+    # ---- Try BS4 extraction first if HTML body is available ----
+    if email_msg.html_body:
+        from .bs4_extractors import extract_with_bs4
+        bs4_result = extract_with_bs4(email_msg.html_body, rule, email_msg)
+        if bs4_result:
+            return bs4_result
+
+    # ---- Dispatch to custom extractor if configured (regex fallback) ----
     extractor = getattr(rule, 'custom_extractor', '')
     if extractor == 'latam':
         return _extract_latam_flights(email_msg, rule)

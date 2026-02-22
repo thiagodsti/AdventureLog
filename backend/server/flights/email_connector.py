@@ -79,13 +79,14 @@ def decode_header_value(raw: str) -> str:
     return ''.join(decoded_parts)
 
 
-def get_email_body(msg) -> str:
-    """Extract text from an email message.
-    Collects both plain-text AND HTML-to-text to maximise flight-data coverage.
-    Many airlines put itinerary details only in the HTML part.
+def get_email_body_and_html(msg) -> tuple[str, str | None]:
+    """Extract text and raw HTML from an email message.
+    Returns (text_body, raw_html). text_body combines plain-text and HTML-to-text.
+    raw_html is the original HTML content (for BS4 parsing), or None if no HTML part.
     """
     plain_body = ''
-    html_body = ''
+    html_text = ''
+    raw_html = None
 
     if msg.is_multipart():
         for part in msg.walk():
@@ -95,38 +96,52 @@ def get_email_body(msg) -> str:
                 if payload:
                     charset = part.get_content_charset() or 'utf-8'
                     plain_body = payload.decode(charset, errors='replace')
-            elif content_type == 'text/html' and not html_body:
+            elif content_type == 'text/html' and raw_html is None:
                 payload = part.get_payload(decode=True)
                 if payload:
                     charset = part.get_content_charset() or 'utf-8'
-                    html_body = html_to_text(payload.decode(charset, errors='replace'))
+                    raw_html = payload.decode(charset, errors='replace')
+                    html_text = html_to_text(raw_html)
     else:
         payload = msg.get_payload(decode=True)
         if payload:
             charset = msg.get_content_charset() or 'utf-8'
             if msg.get_content_type() == 'text/html':
-                html_body = html_to_text(payload.decode(charset, errors='replace'))
+                raw_html = payload.decode(charset, errors='replace')
+                html_text = html_to_text(raw_html)
             else:
                 plain_body = payload.decode(charset, errors='replace')
 
-    # Return both parts combined so regex patterns can match data from either
+    # Combine text parts for regex fallback
     parts = []
     if plain_body:
         parts.append(plain_body.strip())
-    if html_body:
-        parts.append(html_body.strip())
-    return '\n\n'.join(parts) if parts else ''
+    if html_text:
+        parts.append(html_text.strip())
+    text_body = '\n\n'.join(parts) if parts else ''
+
+    return text_body, raw_html
+
+
+def get_email_body(msg) -> str:
+    """Extract text from an email message (backward-compatible wrapper).
+    Collects both plain-text AND HTML-to-text to maximise flight-data coverage.
+    """
+    text_body, _ = get_email_body_and_html(msg)
+    return text_body
 
 
 class EmailMessage:
     """Lightweight container for a fetched email."""
 
-    def __init__(self, message_id: str, sender: str, subject: str, body: str, date: datetime | None):
+    def __init__(self, message_id: str, sender: str, subject: str, body: str,
+                 date: datetime | None, html_body: str | None = None):
         self.message_id = message_id
         self.sender = sender
         self.subject = subject
         self.body = body
         self.date = date
+        self.html_body = html_body
 
     def __repr__(self):
         return f"<EmailMessage {self.message_id!r} from={self.sender!r} subj={self.subject[:40]!r}>"
@@ -202,7 +217,7 @@ def fetch_emails_imap(
                     if not matched:
                         continue
 
-                body = get_email_body(msg)
+                body, raw_html = get_email_body_and_html(msg)
 
                 # Parse date
                 date_str = msg.get('Date', '')
@@ -217,6 +232,7 @@ def fetch_emails_imap(
                     subject=subject,
                     body=body,
                     date=date,
+                    html_body=raw_html,
                 ))
             except Exception as e:
                 logger.warning("Error processing email %s: %s", msg_id, e)
