@@ -415,6 +415,344 @@ def _make_latam_flight(
     }
 
 
+def _extract_sas_flights(email_msg: EmailMessage, rule) -> list[dict]:
+    """
+    Custom SAS extractor that handles text-based parsing (PDF fallback).
+
+    Supports two formats:
+
+    Format 1 — "Din resa" HTML-to-text (block style):
+        07 Aug 2026
+        Stockholm ARN – Copenhagen CPH
+        07:30 – 09:10 (1h 40m)
+        SK 1829 | Operated by SAS
+
+    Format 2 — "Electronic Ticket" PDF (tabular style):
+        SK 533 / 28OCT Stockholm Arlanda - London Heathrow 18:15 19:55 17:35 Terminal 5 1PC
+        VS 449 / 28OCT London Heathrow - Johannesburg JNB 22:30 11:30 Terminal 3 1PC
+
+    Multiple legs may share a single date header (connections on the same day).
+    """
+    body = email_msg.body
+    flights_data: list[dict] = []
+
+    # ---- Shared metadata ----
+    booking_match = re.search(
+        r'(?:C[óo]digo\s+de\s+reserva|booking\s*(?:ref|code|reference)|'
+        r'Bokning|Reserva|PNR|Buchungscode|confirmation\s*code)[:\s\[]+([A-Z0-9]{5,8})',
+        email_msg.subject + '\n' + body, re.IGNORECASE,
+    )
+    shared_booking = booking_match.group(1).strip() if booking_match else ''
+
+    # ---- Passenger name (from "Electronic Ticket" PDF) ----
+    shared_passenger = ''
+    passenger_match = re.search(
+        r'(?:Mr|Mrs|Ms|Miss)\s+([A-ZÀ-ÿ][a-zA-ZÀ-ÿ]+(?:\s+[A-ZÀ-ÿ][a-zA-ZÀ-ÿ]+)*)\s+Date\s+of\s+Issue',
+        body, re.IGNORECASE,
+    )
+    if passenger_match:
+        shared_passenger = passenger_match.group(1).strip()
+
+    # ---- Try Format 2 first (PDF tabular) ----
+    # Pattern: "SK 533 / 28OCT City1 - City2 [IATA] HH:MM HH:MM ..."
+    # The IATA code may appear after the city name (e.g. "Johannesburg JNB")
+    # or not at all (e.g. "Stockholm Arlanda" where IATA is at the start of the route)
+    pdf_line_re = re.compile(
+        r'(?P<flight_number>(?:SK|VS|LH|LX|OS|TP|A3|SN|BA|AF)\s*\d{2,5})'
+        r'\s*/\s*'
+        r'(?P<day>\d{1,2})(?P<month>[A-Z]{3})'
+        r'\s+'
+        r'(?P<route>.+?)'
+        r'\s+'
+        r'(?P<dep_time>\d{1,2}:\d{2})'
+        r'\s+'
+        r'(?P<arr_time>\d{1,2}:\d{2})'
+        r'(?:'
+        r'\s+\d{1,2}:\d{2}'   # optional latest check-in time
+        r')?'
+        r'(?:\s+Terminal\s+(?P<terminal>\S+))?',
+        re.IGNORECASE,
+    )
+
+    pdf_matches = list(pdf_line_re.finditer(body))
+    if pdf_matches:
+        # Infer year from email date
+        ref_year = email_msg.date.year if email_msg.date else datetime.now().year
+
+        for m in pdf_matches:
+            flight_number = m.group('flight_number').strip().replace(' ', '')
+            day = int(m.group('day'))
+            month_str = m.group('month').upper()
+            route_text = m.group('route').strip()
+            dep_time_str = m.group('dep_time')
+            arr_time_str = m.group('arr_time')
+            terminal = m.group('terminal') or ''
+
+            # Parse month from 3-letter abbreviation (e.g. "OCT", "MAY", "NOV")
+            month_num = MONTH_MAP.get(month_str.lower())
+            if not month_num:
+                continue
+
+            # Build flight date with inferred year.
+            # E-tickets are for future flights, so if the date is before
+            # the email date, the flight is next year.
+            try:
+                flight_date = date_type(ref_year, month_num, day)
+            except ValueError:
+                continue
+            if email_msg.date and flight_date < email_msg.date.date():
+                try:
+                    flight_date = date_type(ref_year + 1, month_num, day)
+                except ValueError:
+                    continue
+
+            # Extract airports from route text
+            # Route looks like: "Stockholm Arlanda - London Heathrow"
+            # or "London Heathrow - Johannesburg JNB"
+            # or "Paris CDG - Stockholm Arlanda"
+            dep_airport, arr_airport = _extract_airports_from_sas_route(route_text)
+            if not dep_airport or not arr_airport:
+                continue
+
+            dep_h, dep_m_val = map(int, dep_time_str.split(':'))
+            arr_h, arr_m_val = map(int, arr_time_str.split(':'))
+
+            dep_dt = dj_timezone.make_aware(
+                datetime(flight_date.year, flight_date.month, flight_date.day, dep_h, dep_m_val),
+                timezone.utc,
+            )
+
+            arr_date = flight_date
+            if arr_h < dep_h or (arr_h == dep_h and arr_m_val < dep_m_val):
+                arr_date = flight_date + timedelta(days=1)
+
+            arr_dt = dj_timezone.make_aware(
+                datetime(arr_date.year, arr_date.month, arr_date.day, arr_h, arr_m_val),
+                timezone.utc,
+            )
+
+            flight_data = {
+                'airline_name': rule.airline_name,
+                'airline_code': rule.airline_code,
+                'flight_number': flight_number,
+                'departure_airport': dep_airport,
+                'arrival_airport': arr_airport,
+                'departure_datetime': dep_dt,
+                'arrival_datetime': arr_dt,
+                'booking_reference': shared_booking,
+                'passenger_name': shared_passenger,
+                'seat': '',
+                'cabin_class': '',
+                'departure_terminal': terminal,
+                'arrival_terminal': '',
+                'departure_gate': '',
+                'arrival_gate': '',
+            }
+            flights_data.append(flight_data)
+
+        if flights_data:
+            return flights_data
+
+    # ---- Format 1 fallback: block-style (Din resa / HTML-to-text) ----
+    date_re = re.compile(r'(?:^|\s)(\d{1,2}\s+[A-Za-zÀ-ÿ]+\s+\d{4})(?:\s|$)')
+    route_re = re.compile(
+        r'([A-Z]{3})\s*[-–]\s*(?:[A-ZÀ-ÿ][A-Za-zÀ-ÿ\s-]*?\s+)?([A-Z]{3})'
+    )
+    time_re = re.compile(r'(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})')
+    flight_num_re = re.compile(
+        r'((?:SK|VS|LH|LX|OS|TP|A3|SN|BA|AF)\s*\d{2,5})'
+    )
+
+    date_matches = list(date_re.finditer(body))
+
+    for i, date_m in enumerate(date_matches):
+        dep_date = parse_flight_date(date_m.group(1))
+        if not dep_date:
+            continue
+
+        block_start = date_m.start()
+        block_end = (
+            date_matches[i + 1].start()
+            if i + 1 < len(date_matches)
+            else len(body)
+        )
+        block = body[block_start:block_end]
+
+        routes = list(route_re.finditer(block))
+        times = list(time_re.finditer(block))
+        fns = list(flight_num_re.finditer(block))
+
+        for j in range(min(len(routes), len(times), len(fns))):
+            dep_airport = routes[j].group(1)
+            arr_airport = routes[j].group(2)
+            dep_time_str = times[j].group(1)
+            arr_time_str = times[j].group(2)
+            flight_number = fns[j].group(1).replace(' ', '')
+
+            dep_h, dep_m_val = map(int, dep_time_str.split(':'))
+            arr_h, arr_m_val = map(int, arr_time_str.split(':'))
+
+            dep_dt = dj_timezone.make_aware(
+                datetime(dep_date.year, dep_date.month, dep_date.day, dep_h, dep_m_val),
+                timezone.utc,
+            )
+
+            arr_date = dep_date
+            if arr_h < dep_h or (arr_h == dep_h and arr_m_val < dep_m_val):
+                arr_date = dep_date + timedelta(days=1)
+
+            arr_dt = dj_timezone.make_aware(
+                datetime(arr_date.year, arr_date.month, arr_date.day, arr_h, arr_m_val),
+                timezone.utc,
+            )
+
+            flight_data = {
+                'airline_name': rule.airline_name,
+                'airline_code': rule.airline_code,
+                'flight_number': flight_number,
+                'departure_airport': dep_airport,
+                'arrival_airport': arr_airport,
+                'departure_datetime': dep_dt,
+                'arrival_datetime': arr_dt,
+                'booking_reference': shared_booking,
+                'passenger_name': '',
+                'seat': '',
+                'cabin_class': '',
+                'departure_terminal': '',
+                'arrival_terminal': '',
+                'departure_gate': '',
+                'arrival_gate': '',
+            }
+
+            if flight_data['flight_number'] and flight_data['departure_airport'] and flight_data['arrival_airport']:
+                flights_data.append(flight_data)
+
+    return flights_data
+
+
+def _extract_airports_from_sas_route(route_text: str) -> tuple[str, str]:
+    """
+    Extract departure and arrival IATA codes from a SAS PDF route string.
+
+    Examples:
+        "Stockholm Arlanda - London Heathrow"  → ("ARN", "LHR")
+        "London Heathrow - Johannesburg JNB"   → ("LHR", "JNB")
+        "Paris CDG - Stockholm Arlanda"        → ("CDG", "ARN")
+        "Cape Town - Paris CDG"                → ("CPT", "CDG")
+
+    Strategy:
+    1. Split on " - " (space-dash-space)
+    2. For each half, look for a 3-letter IATA code at the end
+    3. If no IATA code, try to resolve from airport name via DB lookup
+    """
+    parts = re.split(r'\s+-\s+', route_text, maxsplit=1)
+    if len(parts) != 2:
+        return ('', '')
+
+    dep_code = _resolve_sas_airport(parts[0].strip())
+    arr_code = _resolve_sas_airport(parts[1].strip())
+    return (dep_code, arr_code)
+
+
+# Well-known airport name → IATA mappings used by SAS/Amadeus e-tickets.
+# Covers routes where the PDF text doesn't include an explicit IATA code.
+_SAS_KNOWN_AIRPORTS: dict[str, str] = {
+    'stockholm arlanda': 'ARN',
+    'london heathrow': 'LHR',
+    'london gatwick': 'LGW',
+    'london city': 'LCY',
+    'london stansted': 'STN',
+    'london luton': 'LTN',
+    'paris charles de gaulle': 'CDG',
+    'paris orly': 'ORY',
+    'copenhagen kastrup': 'CPH',
+    'oslo gardermoen': 'OSL',
+    'gothenburg landvetter': 'GOT',
+    'bergen flesland': 'BGO',
+    'helsinki vantaa': 'HEL',
+    'amsterdam schiphol': 'AMS',
+    'frankfurt': 'FRA',
+    'munich': 'MUC',
+    'zurich': 'ZRH',
+    'brussels': 'BRU',
+    'vienna': 'VIE',
+    'lisbon': 'LIS',
+    'dublin': 'DUB',
+    'madrid': 'MAD',
+    'barcelona': 'BCN',
+    'rome fiumicino': 'FCO',
+    'milan malpensa': 'MXP',
+    'new york jfk': 'JFK',
+    'new york newark': 'EWR',
+    'los angeles': 'LAX',
+    'chicago': 'ORD',
+    'cape town': 'CPT',
+    'johannesburg': 'JNB',
+    'tokyo narita': 'NRT',
+    'tokyo haneda': 'HND',
+    'bangkok': 'BKK',
+    'singapore': 'SIN',
+    'hong kong': 'HKG',
+    'shanghai pudong': 'PVG',
+    'beijing': 'PEK',
+    'dubai': 'DXB',
+    'doha': 'DOH',
+    'istanbul': 'IST',
+    'arlanda': 'ARN',
+    'heathrow': 'LHR',
+    'gatwick': 'LGW',
+    'kastrup': 'CPH',
+    'gardermoen': 'OSL',
+    'landvetter': 'GOT',
+    'schiphol': 'AMS',
+    'fiumicino': 'FCO',
+    'malpensa': 'MXP',
+}
+
+
+def _resolve_sas_airport(text: str) -> str:
+    """
+    Resolve IATA code from a SAS PDF airport/city string.
+
+    Checks for explicit IATA code first (e.g. "Johannesburg JNB"),
+    then uses a known-airports lookup, and finally falls back to DB.
+    """
+    # Check for explicit IATA code at the end: "Paris CDG", "Johannesburg JNB"
+    m = re.search(r'\b([A-Z]{3})$', text)
+    if m:
+        return m.group(1)
+
+    name_lower = text.lower().strip()
+
+    # Check known airports (covers all common SAS routes)
+    if name_lower in _SAS_KNOWN_AIRPORTS:
+        return _SAS_KNOWN_AIRPORTS[name_lower]
+
+    # Try matching by last word (e.g. "Arlanda" from "Stockholm Arlanda")
+    words = text.split()
+    if words:
+        last_word = words[-1].lower()
+        if last_word in _SAS_KNOWN_AIRPORTS:
+            return _SAS_KNOWN_AIRPORTS[last_word]
+
+    # DB fallback: match airport name (most specific — e.g. "Arlanda")
+    try:
+        from .models import Airport
+        if len(words) > 1:
+            # Try matching the distinguishing word (last word, e.g. "Arlanda", "Heathrow")
+            airport = Airport.objects.filter(name__icontains=words[-1]).first()
+            if airport:
+                return airport.iata_code
+        # Try full text match against airport name
+        airport = Airport.objects.filter(name__icontains=name_lower).first()
+        if airport:
+            return airport.iata_code
+    except Exception:
+        pass
+
+    return ''
+
+
 def extract_flights_from_email(email_msg: EmailMessage, rule) -> list[dict]:
     """
     Apply a rule's body_pattern regex to an email body and extract flight data.
@@ -434,6 +772,8 @@ def extract_flights_from_email(email_msg: EmailMessage, rule) -> list[dict]:
     extractor = getattr(rule, 'custom_extractor', '')
     if extractor == 'latam':
         return _extract_latam_flights(email_msg, rule)
+    elif extractor == 'sas':
+        return _extract_sas_flights(email_msg, rule)
 
     flights_data = []
     body = email_msg.body
@@ -607,11 +947,65 @@ def process_email_for_flights(email_msg: EmailMessage, user, email_account: Emai
     created_flights = []
 
     for flight_data in flights_data:
-        # Check for duplicate
+        # 1. Skip if this exact email+flight was already processed
         msg_id_for_dedup = f"{email_msg.message_id}:{flight_data['flight_number']}"
         if Flight.objects.filter(user=user, email_message_id=msg_id_for_dedup).exists():
             logger.debug("Skipping duplicate flight: %s", msg_id_for_dedup)
             continue
+
+        # 2. Check if this flight already exists (from a different email)
+        #    Match by flight_number + departure date (same day)
+        #    Always keep the newest email's data as source of truth
+        dep_dt = flight_data.get('departure_datetime')
+        if dep_dt:
+            existing = Flight.objects.filter(
+                user=user,
+                flight_number=flight_data['flight_number'],
+                departure_datetime__date=dep_dt.date(),
+                is_manually_added=False,
+            ).first()
+
+            if existing:
+                new_email_date = email_msg.date
+                old_email_date = existing.email_date
+
+                if new_email_date and old_email_date and new_email_date > old_email_date:
+                    # New email is newer → update existing flight with new data
+                    update_fields = []
+                    for field in ('departure_datetime', 'arrival_datetime',
+                                  'departure_terminal', 'arrival_terminal',
+                                  'departure_gate', 'arrival_gate',
+                                  'seat', 'cabin_class',
+                                  'booking_reference', 'passenger_name'):
+                        new_val = flight_data.get(field)
+                        if new_val and new_val != getattr(existing, field):
+                            setattr(existing, field, new_val)
+                            update_fields.append(field)
+                    if update_fields:
+                        existing.email_message_id = msg_id_for_dedup
+                        existing.email_subject = email_msg.subject[:512]
+                        existing.email_date = email_msg.date
+                        update_fields.extend(['email_message_id', 'email_subject', 'email_date'])
+                        # Recalculate duration if times changed
+                        if ('departure_datetime' in update_fields or 'arrival_datetime' in update_fields):
+                            if existing.departure_datetime and existing.arrival_datetime:
+                                delta = existing.arrival_datetime - existing.departure_datetime
+                                minutes = int(delta.total_seconds() / 60)
+                                if minutes > 0:
+                                    existing.duration_minutes = minutes
+                                    update_fields.append('duration_minutes')
+                                # Recalculate status
+                                from django.utils import timezone as _tz
+                                if existing.status != 'cancelled':
+                                    new_status = 'completed' if existing.arrival_datetime < _tz.now() else 'upcoming'
+                                    if new_status != existing.status:
+                                        existing.status = new_status
+                                        update_fields.append('status')
+                        existing.save(update_fields=update_fields)
+                        logger.info("Updated flight %s with newer email: %s", existing.flight_number, update_fields)
+                else:
+                    logger.debug("Skipping older email for existing flight %s", existing.flight_number)
+                continue
 
         try:
             flight = Flight.objects.create(

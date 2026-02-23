@@ -393,7 +393,7 @@ def _extract_sas_bs4(html: str, rule, email_msg) -> list[dict]:
     date_re = re.compile(r'(?:^|\s)(\d{1,2}\s+[A-Za-zÀ-ÿ]+\s+\d{4})(?:\s|$)')
     route_re = re.compile(r'([A-Z]{3})\s*[-–]\s*(?:[A-ZÀ-ÿ][A-Za-zÀ-ÿ\s-]*?\s+)?([A-Z]{3})')
     time_re = re.compile(r'(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})')
-    flight_num_re = re.compile(r'((?:SK|VS|LH|LX|OS|TP|A3|SN)\s*\d{2,5})')
+    flight_num_re = re.compile(r'((?:SK|VS|LH|LX|OS|TP|A3|SN|BA|AF)\s*\d{2,5})')
 
     # Find all date positions, then build blocks from date to next date
     date_matches = list(date_re.finditer(text))

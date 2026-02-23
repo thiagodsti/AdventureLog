@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 # Increment this version whenever rules are added or modified.
 # When a sync detects a version mismatch, it performs a full rescan
 # instead of an incremental one (deduplication prevents duplicate flights).
-RULES_VERSION = '6'
+RULES_VERSION = '11'
 
 # ---------------------------------------------------------------------------
 # Flexible date sub-pattern (reusable)
@@ -112,7 +112,7 @@ BUILTIN_AIRLINE_RULES = [
             r'(?P<arrival_time>' + _TIME + r')'
             r'.*?'
             # Flight number: "SK1829", "SK 2601", "VS 449"
-            r'(?P<flight_number>(?:SK|VS|LH|LX|OS|TP|A3|SN)\s*\d{2,5})'
+            r'(?P<flight_number>(?:SK|VS|LH|LX|OS|TP|A3|SN|BA|AF)\s*\d{2,5})'
         ),
         'date_format': '%d %b %Y',
         'time_format': '%H:%M',

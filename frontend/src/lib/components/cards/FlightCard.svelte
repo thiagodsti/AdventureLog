@@ -150,7 +150,7 @@
 				<button
 					class="btn btn-sm p-1 text-base-content"
 					aria-label="open-details"
-					on:click={() => goto('/flights')}
+					on:click={() => goto(flight.flight_group ? `/flights?group=${flight.flight_group}` : '/flights')}
 				>
 					<Launch class="w-4 h-4" />
 				</button>

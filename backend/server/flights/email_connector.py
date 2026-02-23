@@ -79,14 +79,29 @@ def decode_header_value(raw: str) -> str:
     return ''.join(decoded_parts)
 
 
+def _extract_text_from_pdf(pdf_bytes: bytes) -> str:
+    """Extract text from a PDF attachment."""
+    import io
+    try:
+        import pdfplumber
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            pages = [page.extract_text() or '' for page in pdf.pages]
+            return '\n'.join(pages)
+    except Exception as e:
+        logger.warning("Failed to extract PDF text: %s", e)
+        return ''
+
+
 def get_email_body_and_html(msg) -> tuple[str, str | None]:
     """Extract text and raw HTML from an email message.
-    Returns (text_body, raw_html). text_body combines plain-text and HTML-to-text.
-    raw_html is the original HTML content (for BS4 parsing), or None if no HTML part.
+    Returns (text_body, raw_html). text_body combines plain-text, HTML-to-text,
+    and PDF attachment text. raw_html is the original HTML content (for BS4
+    parsing), or None if no HTML part.
     """
     plain_body = ''
     html_text = ''
     raw_html = None
+    pdf_texts = []
 
     if msg.is_multipart():
         for part in msg.walk():
@@ -102,6 +117,13 @@ def get_email_body_and_html(msg) -> tuple[str, str | None]:
                     charset = part.get_content_charset() or 'utf-8'
                     raw_html = payload.decode(charset, errors='replace')
                     html_text = html_to_text(raw_html)
+            elif content_type == 'application/pdf':
+                payload = part.get_payload(decode=True)
+                if payload:
+                    pdf_text = _extract_text_from_pdf(payload)
+                    if pdf_text:
+                        pdf_texts.append(pdf_text)
+                        logger.info("Extracted %d chars from PDF attachment", len(pdf_text))
     else:
         payload = msg.get_payload(decode=True)
         if payload:
@@ -112,12 +134,14 @@ def get_email_body_and_html(msg) -> tuple[str, str | None]:
             else:
                 plain_body = payload.decode(charset, errors='replace')
 
-    # Combine text parts for regex fallback
+    # Combine text parts for regex fallback (includes PDF text)
     parts = []
     if plain_body:
         parts.append(plain_body.strip())
     if html_text:
         parts.append(html_text.strip())
+    if pdf_texts:
+        parts.extend(pdf_texts)
     text_body = '\n\n'.join(parts) if parts else ''
 
     return text_body, raw_html

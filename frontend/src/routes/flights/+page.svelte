@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
+	import { page } from '$app/stores';
+	import { onMount, tick } from 'svelte';
 	import { t } from 'svelte-i18n';
 	import type { Flight, FlightGroup, EmailAccount, FlightStats } from '$lib/types';
 
@@ -37,6 +39,29 @@
 	let showAddEmailModal = false;
 	let syncing: string | null = null;
 	let expandedGroups: Set<string> = new Set();
+
+	// Auto-expand group from URL query param (e.g. ?group=<id>)
+	onMount(async () => {
+		const groupId = $page.url.searchParams.get('group');
+		if (groupId) {
+			viewMode = 'trips';
+			// Determine if the group is upcoming or history
+			const group = flightGroups.find((g) => g.id === groupId);
+			if (group) {
+				const now = new Date();
+				const isUpcoming = group.end_date ? new Date(group.end_date) >= now : true;
+				flightView = isUpcoming ? 'upcoming' : 'history';
+			}
+			expandedGroups.add(groupId);
+			expandedGroups = expandedGroups;
+			await tick();
+			const el = document.getElementById(`group-${groupId}`);
+			if (el) {
+				el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+			}
+		}
+	});
+
 	let connectionTested = false;
 	let testingConnection = false;
 	let connectionTestMessage = '';
@@ -352,7 +377,7 @@
 						{@const groupFlights = [...group.flights].sort(
 							(a, b) => new Date(a.departure_datetime).getTime() - new Date(b.departure_datetime).getTime()
 						)}
-						<div class="card card-border bg-base-100 shadow-sm">
+						<div id="group-{group.id}" class="card card-border bg-base-100 shadow-sm">
 							<!-- Trip Header (clickable) -->
 							<!-- svelte-ignore a11y-click-events-have-key-events -->
 							<!-- svelte-ignore a11y-no-static-element-interactions -->
