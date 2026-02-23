@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.utils import timezone
 
-from flights.models import Flight
+from flights.models import Airport, Flight
 from flights.serializers import FlightSerializer, FlightWriteSerializer
 
 
@@ -79,4 +79,101 @@ class FlightViewSet(viewsets.ModelViewSet):
             'unique_airlines': list(airlines),
             'unique_airports_count': len(airports_visited),
             'unique_airports': sorted(airports_visited),
+        })
+
+    @action(detail=False, methods=['get'])
+    def calendar(self, request):
+        """Return flights formatted for calendar display."""
+        flights = self.get_queryset()
+        result = []
+        for f in flights:
+            result.append({
+                'id': str(f.id),
+                'flight_number': f.flight_number,
+                'airline_name': f.airline_name or '',
+                'departure_airport': f.departure_airport,
+                'arrival_airport': f.arrival_airport,
+                'departure_city': f.departure_city or '',
+                'arrival_city': f.arrival_city or '',
+                'departure_datetime': (
+                    f.departure_datetime.isoformat()
+                    if f.departure_datetime else None
+                ),
+                'arrival_datetime': (
+                    f.arrival_datetime.isoformat()
+                    if f.arrival_datetime else None
+                ),
+                'status': f.status,
+            })
+        return Response(result)
+
+    @action(detail=False, methods=['get'])
+    def routes(self, request):
+        """Return flight routes as GeoJSON for map visualization."""
+        flights = self.get_queryset().select_related(
+            'departure_airport_obj', 'arrival_airport_obj'
+        )
+        features = []
+        for f in flights:
+            dep = f.departure_airport_obj
+            arr = f.arrival_airport_obj
+            if not dep or not arr:
+                continue
+            features.append({
+                'type': 'Feature',
+                'geometry': {
+                    'type': 'LineString',
+                    'coordinates': [
+                        [float(dep.longitude), float(dep.latitude)],
+                        [float(arr.longitude), float(arr.latitude)],
+                    ]
+                },
+                'properties': {
+                    'flight_id': str(f.id),
+                    'flight_number': f.flight_number,
+                    'departure_airport': f.departure_airport,
+                    'arrival_airport': f.arrival_airport,
+                    'departure_city': f.departure_city or dep.city_name,
+                    'arrival_city': f.arrival_city or arr.city_name,
+                    'status': f.status,
+                    'departure_datetime': (
+                        f.departure_datetime.isoformat()
+                        if f.departure_datetime else None
+                    ),
+                    'airline_name': f.airline_name,
+                }
+            })
+
+        # Also return airport points for markers
+        airport_codes = set()
+        for f in flights:
+            if f.departure_airport_obj:
+                airport_codes.add(f.departure_airport)
+            if f.arrival_airport_obj:
+                airport_codes.add(f.arrival_airport)
+
+        airport_features = []
+        for airport in Airport.objects.filter(iata_code__in=airport_codes):
+            airport_features.append({
+                'type': 'Feature',
+                'geometry': {
+                    'type': 'Point',
+                    'coordinates': [float(airport.longitude), float(airport.latitude)],
+                },
+                'properties': {
+                    'iata_code': airport.iata_code,
+                    'name': airport.name,
+                    'city_name': airport.city_name,
+                }
+            })
+
+        return Response({
+            'routes': {
+                'type': 'FeatureCollection',
+                'features': features,
+            },
+            'airports': {
+                'type': 'FeatureCollection',
+                'features': airport_features,
+            },
         })

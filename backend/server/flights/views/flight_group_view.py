@@ -37,6 +37,9 @@ class FlightGroupViewSet(viewsets.ModelViewSet):
         updated = Flight.objects.filter(
             id__in=flight_ids, user=request.user
         ).update(flight_group=group)
+        # Keep the linked collection in sync
+        from flights.grouping import _ensure_collection_for_group
+        _ensure_collection_for_group(group)
         return Response({'flights_added': updated})
 
     @action(detail=True, methods=['post'], url_path='remove-flights')
@@ -52,6 +55,9 @@ class FlightGroupViewSet(viewsets.ModelViewSet):
         updated = Flight.objects.filter(
             id__in=flight_ids, user=request.user, flight_group=group
         ).update(flight_group=None)
+        # Keep the linked collection in sync
+        from flights.grouping import _ensure_collection_for_group
+        _ensure_collection_for_group(group)
         return Response({'flights_removed': updated})
 
     @action(detail=False, methods=['post'], url_path='auto-group')

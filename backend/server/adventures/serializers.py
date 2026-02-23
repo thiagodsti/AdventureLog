@@ -719,6 +719,7 @@ class CollectionSerializer(CustomModelSerializer):
     notes = serializers.SerializerMethodField()
     checklists = serializers.SerializerMethodField()
     lodging = serializers.SerializerMethodField()
+    flights = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
     days_until_start = serializers.SerializerMethodField()
     primary_image = ContentImageSerializer(read_only=True)
@@ -754,6 +755,7 @@ class CollectionSerializer(CustomModelSerializer):
             'collaborators',
             'link',
             'lodging',
+            'flights',
             'status',
             'days_until_start',
             'primary_image',
@@ -832,6 +834,13 @@ class CollectionSerializer(CustomModelSerializer):
         if self.context.get('nested', False):
             return []
         return LodgingSerializer(obj.lodging_set.all(), many=True, context=self.context).data
+
+    def get_flights(self, obj):
+        # Only include flights if not in nested context
+        if self.context.get('nested', False):
+            return []
+        from flights.serializers import FlightSerializer
+        return FlightSerializer(obj.flight_set.all(), many=True, context=self.context).data
 
     def get_status(self, obj):
         """Calculate the status of the collection based on dates"""

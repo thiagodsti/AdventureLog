@@ -25,7 +25,7 @@
 	export let data;
 
 	let createModalOpen: boolean = false;
-	let showRegions: boolean = false;
+	let showRegions: boolean = true;
 	let showActivities: boolean = false;
 	let showCities: boolean = false;
 	let sidebarOpen: boolean = false;
@@ -926,7 +926,7 @@
 							<div class="space-y-2">
 								<div class="flex justify-between text-sm">
 									<span>{$t('map.completion')}</span>
-									<span>{Math.round((visitedAdventures / totalAdventures) * 100)}%</span>
+									<span>{totalAdventures > 0 ? Math.round((visitedAdventures / totalAdventures) * 100) : 0}%</span>
 								</div>
 								<progress
 									class="progress progress-primary w-full"

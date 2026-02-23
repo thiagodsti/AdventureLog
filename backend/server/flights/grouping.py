@@ -34,6 +34,8 @@ def auto_group_flights(user) -> dict:
     if not ungrouped:
         # Still run merge phase even if no new ungrouped flights
         merged = _merge_overlapping_groups(user, max_gap=timedelta(hours=48))
+        # Ensure all groups have linked collections
+        _ensure_collections_for_all_groups(user)
         return {
             'groups_created': 0,
             'flights_grouped': 0,
@@ -82,6 +84,9 @@ def auto_group_flights(user) -> dict:
     merged = _merge_overlapping_groups(user, max_gap=timedelta(hours=48))
     if merged:
         logger.info("Merged %d overlapping groups", merged)
+
+    # Ensure all groups (including pre-existing ones) have a linked collection
+    _ensure_collections_for_all_groups(user)
 
     return {
         'groups_created': groups_created,
@@ -269,3 +274,111 @@ def _merge_overlapping_groups(user, max_gap: timedelta) -> int:
                 break
 
     return merges
+
+
+def _ensure_collection_for_group(group):
+    """
+    Create or update a Collection linked to this FlightGroup.
+    Also creates CollectionItineraryItem records so flights appear on
+    the correct days in the itinerary planner.
+    Returns the Collection instance, or None if the group has no flights.
+    """
+    from adventures.models import Collection, CollectionItineraryItem  # lazy import
+    from django.contrib.contenttypes.models import ContentType
+
+    flights = list(group.flights.order_by('departure_datetime'))
+    if not flights:
+        return None
+
+    if group.collection:
+        # Update existing collection dates and name
+        collection = group.collection
+        collection.start_date = flights[0].departure_datetime.date()
+        collection.end_date = flights[-1].arrival_datetime.date() if flights[-1].arrival_datetime else flights[-1].departure_datetime.date()
+        collection.name = group.name
+        collection.save(update_fields=['name', 'start_date', 'end_date'])
+        # Ensure all flights in the group are linked to the collection
+        group.flights.filter(collection__isnull=True).update(collection=collection)
+        # Ensure itinerary items exist for all flights
+        _ensure_itinerary_items_for_flights(collection, flights)
+        return collection
+
+    end_date = flights[-1].arrival_datetime.date() if flights[-1].arrival_datetime else flights[-1].departure_datetime.date()
+    collection = Collection.objects.create(
+        user=group.user,
+        name=group.name,
+        start_date=flights[0].departure_datetime.date(),
+        end_date=end_date,
+    )
+    group.collection = collection
+    group.save(update_fields=['collection'])
+
+    # Link all flights in this group to the collection
+    group.flights.update(collection=collection)
+
+    # Create itinerary items for the flights
+    _ensure_itinerary_items_for_flights(collection, flights)
+
+    logger.info(
+        "Auto-created collection '%s' for flight group '%s'",
+        collection.name, group.name,
+    )
+    return collection
+
+
+def _ensure_itinerary_items_for_flights(collection, flights):
+    """
+    Create CollectionItineraryItem records for flights that don't have one yet.
+    Places each flight on its departure date in the itinerary.
+    """
+    from adventures.models import CollectionItineraryItem
+    from django.contrib.contenttypes.models import ContentType
+    from django.db.models import Max
+
+    flight_ct = ContentType.objects.get_for_model(Flight)
+
+    # Find which flights already have itinerary items
+    existing_ids = set(
+        CollectionItineraryItem.objects.filter(
+            collection=collection,
+            content_type=flight_ct,
+            object_id__in=[f.id for f in flights],
+        ).values_list('object_id', flat=True)
+    )
+
+    for flight in flights:
+        if flight.id in existing_ids:
+            continue
+        if not flight.departure_datetime:
+            continue
+
+        flight_date = flight.departure_datetime.date()
+
+        # Clamp to collection date range
+        if collection.start_date and flight_date < collection.start_date:
+            flight_date = collection.start_date
+        if collection.end_date and flight_date > collection.end_date:
+            flight_date = collection.end_date
+
+        # Get next order for this date
+        max_order = CollectionItineraryItem.objects.filter(
+            collection=collection,
+            date=flight_date,
+            is_global=False,
+        ).aggregate(max_order=Max('order'))['max_order']
+        next_order = (max_order + 1) if max_order is not None else 0
+
+        CollectionItineraryItem.objects.create(
+            collection=collection,
+            content_type=flight_ct,
+            object_id=flight.id,
+            date=flight_date,
+            order=next_order,
+        )
+
+
+def _ensure_collections_for_all_groups(user):
+    """Ensure every FlightGroup for this user has a linked Collection."""
+    groups = FlightGroup.objects.filter(user=user)
+    for group in groups:
+        _ensure_collection_for_group(group)

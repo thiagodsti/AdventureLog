@@ -213,17 +213,17 @@
 	<!-- Desktop Navigation -->
 	<div class="navbar-center hidden lg:flex">
 		{#if data.user}
-			<ul class="menu menu-horizontal gap-1">
+			<ul class="menu menu-horizontal gap-0.5">
 				{#each navigationItems as item}
 					<li>
 						<a
 							href={item.path}
-							class="btn btn-ghost gap-2 rounded-xl transition-all duration-200 hover:bg-base-200"
+							class="btn btn-ghost btn-sm gap-1.5 rounded-xl transition-all duration-200 hover:bg-base-200 px-2 xl:px-3"
 							class:bg-primary-10={$page.url.pathname === item.path}
 							class:text-primary={$page.url.pathname === item.path}
 						>
 							<svelte:component this={item.icon} class="w-4 h-4" />
-							<span class="hidden xl:inline">{$t(item.label)}</span>
+							<span class="hidden xl:inline text-sm">{$t(item.label)}</span>
 						</a>
 					</li>
 				{/each}

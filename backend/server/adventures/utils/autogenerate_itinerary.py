@@ -98,6 +98,7 @@ def auto_generate_itinerary(collection: Collection) -> List[CollectionItineraryI
     PRIORITY_LODGING = 1
     PRIORITY_VISIT = 2
     PRIORITY_TRANSPORTATION = 3
+    PRIORITY_FLIGHT = 3  # Same priority as transportation
     PRIORITY_NOTE = 4
     PRIORITY_CHECKLIST = 5
     
@@ -195,6 +196,22 @@ def auto_generate_itinerary(collection: Collection) -> List[CollectionItineraryI
                     PRIORITY_CHECKLIST
                 ))
     
+    # Process Flights: one item on departure date
+    from flights.models import Flight as FlightModel
+    flights = FlightModel.objects.filter(collection=collection)
+    for flight in flights:
+        if flight.departure_datetime:
+            flight_date = _datetime_to_date_in_timezone(flight.departure_datetime, None)
+
+            if start_date <= flight_date <= end_date:
+                if flight_date not in items_by_date:
+                    items_by_date[flight_date] = []
+                items_by_date[flight_date].append((
+                    ContentType.objects.get_for_model(FlightModel),
+                    flight.id,
+                    PRIORITY_FLIGHT
+                ))
+
     # Validation: must have at least one dated record
     if not items_by_date:
         raise ValidationError({

@@ -17,6 +17,8 @@
 	import Ticket from '~icons/mdi/ticket-outline';
 	import ContentCopy from '~icons/mdi/content-copy';
 	import Check from '~icons/mdi/check';
+	import MapIcon from '~icons/mdi/map-outline';
+	import FlightRouteMap from '$lib/components/flights/FlightRouteMap.svelte';
 
 	export let data: any;
 
@@ -30,7 +32,7 @@
 	let copiedForwarding = false;
 	// 'upcoming' shows future flights; 'history' shows completed/cancelled
 	let flightView: 'upcoming' | 'history' = 'upcoming';
-	let viewMode: 'trips' | 'all' = 'trips';
+	let viewMode: 'trips' | 'all' | 'map' = 'trips';
 	let showAddFlightModal = false;
 	let showAddEmailModal = false;
 	let syncing: string | null = null;
@@ -299,6 +301,12 @@
 					>
 						All Flights
 					</button>
+					<button
+						class="join-item btn btn-sm {viewMode === 'map' ? 'btn-active' : ''}"
+						on:click={() => (viewMode = 'map')}
+					>
+						<MapIcon class="w-4 h-4" /> Map
+					</button>
 				</div>
 			</div>
 			<div class="flex gap-2">
@@ -515,6 +523,12 @@
 					{/each}
 				</div>
 			{/if}
+
+		<!-- ===== MAP VIEW ===== -->
+		{:else if viewMode === 'map'}
+			<div class="w-full h-[70vh] rounded-lg overflow-hidden">
+				<FlightRouteMap />
+			</div>
 
 		<!-- ===== ALL FLIGHTS VIEW ===== -->
 		{:else}

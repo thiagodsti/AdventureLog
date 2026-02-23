@@ -22,6 +22,19 @@ type CalendarLocation = {
 	}>;
 };
 
+type CalendarFlight = {
+	id: string;
+	flight_number: string;
+	airline_name: string;
+	departure_airport: string;
+	arrival_airport: string;
+	departure_city: string;
+	arrival_city: string;
+	departure_datetime: string | null;
+	arrival_datetime: string | null;
+	status: string;
+};
+
 export const load = (async (event) => {
 	let sessionId = event.cookies.get('sessionid');
 	const headers: Record<string, string> = {};
@@ -32,13 +45,19 @@ export const load = (async (event) => {
 		return redirect(302, '/login');
 	}
 
-	let visitedFetch = await fetch(`${endpoint}/api/locations/calendar/`, {
-		headers
-	});
+	let [visitedFetch, flightsFetch] = await Promise.all([
+		fetch(`${endpoint}/api/locations/calendar/`, { headers }),
+		fetch(`${endpoint}/api/flights/flights/calendar/`, { headers })
+	]);
 
 	let adventures: CalendarLocation[] = [];
 	if (visitedFetch.ok) {
 		adventures = (await visitedFetch.json()) as CalendarLocation[];
+	}
+
+	let flights: CalendarFlight[] = [];
+	if (flightsFetch.ok) {
+		flights = (await flightsFetch.json()) as CalendarFlight[];
 	}
 
 	// Get user's local timezone as fallback
@@ -150,6 +169,70 @@ export const load = (async (event) => {
 						adventureId: adventure.id
 					}
 				});
+			}
+		});
+	});
+
+	// Add flights to calendar
+	flights.forEach((flight) => {
+		if (!flight.departure_datetime) return;
+
+		const depDate = new Date(flight.departure_datetime);
+		const arrDate = flight.arrival_datetime ? new Date(flight.arrival_datetime) : depDate;
+
+		const startDate = new Intl.DateTimeFormat('sv-SE', {
+			timeZone: userTimezone,
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			hourCycle: 'h23'
+		})
+			.format(depDate)
+			.replace(' ', 'T');
+
+		const endDate = new Intl.DateTimeFormat('sv-SE', {
+			timeZone: userTimezone,
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			hourCycle: 'h23'
+		})
+			.format(arrDate)
+			.replace(' ', 'T');
+
+		const route = `${flight.departure_airport} → ${flight.arrival_airport}`;
+		const title = `✈️ ${flight.flight_number} ${route}`;
+
+		const statusColor =
+			flight.status === 'completed'
+				? '#22c55e'
+				: flight.status === 'cancelled'
+					? '#9ca3af'
+					: '#8b5cf6';
+
+		dates.push({
+			id: `flight-${flight.id}`,
+			start: startDate,
+			end: endDate,
+			title,
+			backgroundColor: statusColor,
+			extendedProps: {
+				adventureName: `${flight.airline_name} ${flight.flight_number}`,
+				category: 'Flight',
+				icon: '✈️',
+				timezone: userTimezone,
+				isAllDay: false,
+				formattedStart: formatDateInTimezone(flight.departure_datetime, userTimezone),
+				formattedEnd: formatDateInTimezone(
+					flight.arrival_datetime || flight.departure_datetime,
+					userTimezone
+				),
+				location: route,
+				description: flight.status
 			}
 		});
 	});

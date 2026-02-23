@@ -8,7 +8,8 @@
 		Transportation,
 		Lodging,
 		Note,
-		Checklist
+		Checklist,
+		Flight
 	} from '$lib/types';
 	// @ts-ignore
 	import { DateTime } from 'luxon';
@@ -23,6 +24,7 @@
 	import LodgingCard from '$lib/components/cards/LodgingCard.svelte';
 	import NoteCard from '$lib/components/cards/NoteCard.svelte';
 	import ChecklistCard from '$lib/components/cards/ChecklistCard.svelte';
+	import FlightCard from '$lib/components/cards/FlightCard.svelte';
 	import NewLocationModal from '$lib/components/locations/LocationModal.svelte';
 	import LodgingModal from '../lodging/LodgingModal.svelte';
 	import TransportationModal from '../transportation/TransportationModal.svelte';
@@ -45,7 +47,7 @@
 
 	// Extended itinerary item with resolved object
 	type ResolvedItineraryItem = CollectionItineraryItem & {
-		resolvedObject: Location | Transportation | Lodging | Note | Checklist | null;
+		resolvedObject: Location | Transportation | Lodging | Note | Checklist | Flight | null;
 	};
 
 	// Group itinerary items by day
@@ -86,8 +88,9 @@
 		const hasTransportation = collection.transportations?.some((t) => t.date) || false;
 		const hasNotes = collection.notes?.some((n) => n.date) || false;
 		const hasChecklists = collection.checklists?.some((c) => c.date) || false;
+		const hasFlights = collection.flights?.some((f) => f.departure_datetime) || false;
 
-		return hasVisits || hasLodging || hasTransportation || hasNotes || hasChecklists;
+		return hasVisits || hasLodging || hasTransportation || hasNotes || hasChecklists || hasFlights;
 	}
 
 	async function handleAutoGenerate() {
@@ -335,6 +338,11 @@
 					(c) => String(c.id) !== String(objectId)
 				);
 			}
+			if (collection.flights) {
+				collection.flights = collection.flights.filter(
+					(f) => String(f.id) !== String(objectId)
+				);
+			}
 
 			// Re-group days and return
 			days = groupItemsByDay(collection);
@@ -360,6 +368,8 @@
 			collection.notes = collection.notes?.filter((n) => n.id !== itemToDelete.object_id);
 		} else if (objectType === 'checklist') {
 			collection.checklists = collection.checklists?.filter((c) => c.id !== itemToDelete.object_id);
+		} else if (objectType === 'flight') {
+			collection.flights = collection.flights?.filter((f) => f.id !== itemToDelete.object_id);
 		}
 		days = groupItemsByDay(collection);
 	}
@@ -741,6 +751,11 @@
 					if (checklist?.date) {
 						addDateIfInRange(DateTime.fromISO(checklist.date.split('T')[0]).startOf('day'));
 					}
+				} else if (objectType === 'flight') {
+					const flight = resolved.resolvedObject as Flight | null;
+					if (flight?.departure_datetime) {
+						addDateIfInRange(DateTime.fromISO(flight.departure_datetime.split('T')[0]).startOf('day'));
+					}
 				}
 
 				// Add the item to each applicable date
@@ -776,6 +791,8 @@
 			resolvedObject = collection.notes?.find((n) => n.id === item.object_id) || null;
 		} else if (objectType === 'checklist') {
 			resolvedObject = collection.checklists?.find((c) => c.id === item.object_id) || null;
+		} else if (objectType === 'flight') {
+			resolvedObject = collection.flights?.find((f) => f.id === item.object_id) || null;
 		}
 
 		return {
@@ -881,6 +898,13 @@
 		collection.checklists?.forEach((checklist) => {
 			if (!scheduledIds.has(checklist.id)) {
 				unscheduled.push({ type: 'checklist', item: checklist });
+			}
+		});
+
+		// Check flights
+		collection.flights?.forEach((flight) => {
+			if (!scheduledIds.has(flight.id)) {
+				unscheduled.push({ type: 'flight', item: flight });
 			}
 		});
 
@@ -1809,6 +1833,16 @@
 												on:edit={handleEditChecklist}
 												on:moveToGlobal={(e) => moveItemToGlobal(e.detail.type, e.detail.id)}
 											/>
+										{:else if objectType === 'flight'}
+											<FlightCard
+												flight={resolvedObj}
+												{user}
+												{collection}
+												on:delete={handleItemDelete}
+												itineraryItem={item}
+												on:removeFromItinerary={handleRemoveItineraryItem}
+												on:moveToGlobal={(e) => moveItemToGlobal(e.detail.type, e.detail.id)}
+											/>
 										{/if}
 									{:else}
 										<div class="alert alert-warning">
@@ -2257,6 +2291,16 @@
 																day.date
 															)}
 													/>
+												{:else if objectType === 'flight'}
+													<FlightCard
+														flight={resolvedObj}
+														{user}
+														{collection}
+														on:delete={handleItemDelete}
+														itineraryItem={item}
+														on:removeFromItinerary={handleRemoveItineraryItem}
+														on:moveToGlobal={(e) => moveItemToGlobal(e.detail.type, e.detail.id)}
+													/>
 												{/if}
 											</div>
 										{:else}
@@ -2514,6 +2558,13 @@
 										{collection}
 										on:delete={handleItemDelete}
 										on:edit={handleEditChecklist}
+									/>
+								{:else if type === 'flight'}
+									<FlightCard
+										flight={item}
+										{user}
+										{collection}
+										on:delete={handleItemDelete}
 									/>
 								{/if}
 							</div>

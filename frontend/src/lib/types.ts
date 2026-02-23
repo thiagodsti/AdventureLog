@@ -152,6 +152,7 @@ export type Collection = {
 	notes?: Note[];
 	lodging?: Lodging[];
 	checklists?: Checklist[];
+	flights?: Flight[];
 	is_archived?: boolean;
 	shared_with: string[] | undefined;
 	collaborators?: Collaborator[];
@@ -584,7 +585,7 @@ export type CollectionItineraryItem = {
 	collection: string; // UUID of the collection
 	content_type: string; // Content type model name
 	object_id: string; // UUID of the referenced object
-	item: Visit | Transportation | Lodging | Note | Checklist; // The actual referenced object
+	item: Visit | Transportation | Lodging | Note | Checklist | Flight; // The actual referenced object
 	date: string | null; // ISO 8601 date string
 	is_global?: boolean; // Trip-wide item (no specific date)
 	order: number; // Manual order within a day
@@ -626,6 +627,15 @@ export type AirlineRule = {
 	updated_at: string;
 };
 
+export type Airport = {
+	iata_code: string;
+	name: string;
+	city_name: string;
+	country_code: string;
+	latitude: number;
+	longitude: number;
+};
+
 export type Flight = {
 	id: string;
 	airline_name: string;
@@ -637,17 +647,20 @@ export type Flight = {
 	departure_datetime: string;
 	departure_terminal: string;
 	departure_gate: string;
+	departure_airport_detail?: Airport | null;
 	arrival_airport: string;
 	arrival_city: string;
 	arrival_datetime: string;
 	arrival_terminal: string;
 	arrival_gate: string;
+	arrival_airport_detail?: Airport | null;
 	passenger_name: string;
 	seat: string;
 	cabin_class: string;
 	status: 'upcoming' | 'completed' | 'cancelled';
 	duration_minutes: number | null;
 	flight_group: string | null;
+	collection: string | null;
 	email_account: string | null;
 	airline_rule: string | null;
 	email_subject: string;
@@ -663,6 +676,7 @@ export type FlightGroup = {
 	name: string;
 	description: string;
 	is_auto_generated: boolean;
+	collection: string | null;
 	flights: Flight[];
 	flight_count: number;
 	start_date: string | null;

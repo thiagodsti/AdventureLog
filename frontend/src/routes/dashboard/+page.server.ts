@@ -1,7 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 const PUBLIC_SERVER_URL = process.env['PUBLIC_SERVER_URL'];
-import type { Location } from '$lib/types';
+import type { Flight, Location } from '$lib/types';
 
 const serverEndpoint = PUBLIC_SERVER_URL || 'http://localhost:8000';
 
@@ -10,28 +10,34 @@ export const load = (async (event) => {
 		return redirect(302, '/login');
 	} else {
 		let adventures: Location[] = [];
+		const headers = {
+			Cookie: `sessionid=${event.cookies.get('sessionid')}`
+		};
 
-		let initialFetch = await event.fetch(`${serverEndpoint}/api/locations/`, {
-			headers: {
-				Cookie: `sessionid=${event.cookies.get('sessionid')}`
-			},
-			credentials: 'include'
-		});
+		let [initialFetch, statsRes, upcomingFlightsRes, flightStatsRes] = await Promise.all([
+			event.fetch(`${serverEndpoint}/api/locations/`, { headers, credentials: 'include' }),
+			event.fetch(`${serverEndpoint}/api/stats/counts/${event.locals.user.username}/`, {
+				headers
+			}),
+			event.fetch(`${serverEndpoint}/api/flights/flights/upcoming/`, { headers }),
+			event.fetch(`${serverEndpoint}/api/flights/flights/stats/`, { headers })
+		]);
 
 		let stats = null;
-
-		let res = await event.fetch(
-			`${serverEndpoint}/api/stats/counts/${event.locals.user.username}/`,
-			{
-				headers: {
-					Cookie: `sessionid=${event.cookies.get('sessionid')}`
-				}
-			}
-		);
-		if (!res.ok) {
-			console.error('Failed to fetch user stats');
+		if (statsRes.ok) {
+			stats = await statsRes.json();
 		} else {
-			stats = await res.json();
+			console.error('Failed to fetch user stats');
+		}
+
+		let upcomingFlights: Flight[] = [];
+		if (upcomingFlightsRes.ok) {
+			upcomingFlights = (await upcomingFlightsRes.json()) as Flight[];
+		}
+
+		let flightStats = null;
+		if (flightStatsRes.ok) {
+			flightStats = await flightStatsRes.json();
 		}
 
 		if (!initialFetch.ok) {
@@ -49,7 +55,9 @@ export const load = (async (event) => {
 		return {
 			props: {
 				adventures,
-				stats
+				stats,
+				upcomingFlights: upcomingFlights.slice(0, 3),
+				flightStats
 			}
 		};
 	}

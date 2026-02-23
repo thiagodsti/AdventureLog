@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { createEventDispatcher, onMount } from 'svelte';
-	import type { Collection, Location, Transportation, Lodging, Note, Checklist } from '$lib/types';
+	import type { Collection, Location, Transportation, Lodging, Note, Checklist, Flight } from '$lib/types';
 	// @ts-ignore
 	import { DateTime } from 'luxon';
 	import CalendarBlank from '~icons/mdi/calendar-blank';
@@ -11,6 +11,7 @@
 	import LodgingCard from '$lib/components/cards/LodgingCard.svelte';
 	import NoteCard from '$lib/components/cards/NoteCard.svelte';
 	import ChecklistCard from '$lib/components/cards/ChecklistCard.svelte';
+	import FlightCard from '$lib/components/cards/FlightCard.svelte';
 	import { date, t } from 'svelte-i18n';
 
 	const dispatch = createEventDispatcher();
@@ -140,6 +141,22 @@
 			}
 		});
 
+		// Process flights
+		collection.flights?.forEach((flight) => {
+			if (isScheduled(flight.id)) {
+				const dates = scheduledMap.get(flight.id) || [];
+				if (dates.includes(targetDate))
+					scheduledOnThisDay.push({ type: 'flight', item: flight, dates });
+				else scheduledOtherDays.push({ type: 'flight', item: flight, dates });
+			} else {
+				const itemDate = flight.departure_datetime
+					? flight.departure_datetime.split('T')[0]
+					: null;
+				if (itemDate === targetDate) onThisDay.push({ type: 'flight', item: flight });
+				else otherDays.push({ type: 'flight', item: flight });
+			}
+		});
+
 		return { scheduledOnThisDay, onThisDay, scheduledOtherDays, otherDays };
 	}
 
@@ -238,6 +255,8 @@
 											<NoteCard note={item} {user} {collection} readOnly={true} />
 										{:else if type === 'checklist'}
 											<ChecklistCard checklist={item} {user} {collection} readOnly={true} />
+										{:else if type === 'flight'}
+											<FlightCard flight={item} {user} {collection} readOnly={true} />
 										{/if}
 									</div>
 									<button
@@ -288,6 +307,8 @@
 											<NoteCard note={item} {user} {collection} readOnly={true} />
 										{:else if type === 'checklist'}
 											<ChecklistCard checklist={item} {user} {collection} readOnly={true} />
+										{:else if type === 'flight'}
+											<FlightCard flight={item} {user} {collection} readOnly={true} />
 										{/if}
 									</div>
 									<div class="text-xs opacity-70 mb-2">
@@ -341,6 +362,8 @@
 											<NoteCard note={item} {user} {collection} readOnly={true} />
 										{:else if type === 'checklist'}
 											<ChecklistCard checklist={item} {user} {collection} readOnly={true} />
+										{:else if type === 'flight'}
+											<FlightCard flight={item} {user} {collection} readOnly={true} />
 										{/if}
 									</div>
 									<div class="text-xs opacity-70 mb-2">On: {(dates || []).join(', ')}</div>
@@ -397,6 +420,8 @@
 											<NoteCard note={item} {user} {collection} readOnly={true} />
 										{:else if type === 'checklist'}
 											<ChecklistCard checklist={item} {user} {collection} readOnly={true} />
+										{:else if type === 'flight'}
+											<FlightCard flight={item} {user} {collection} readOnly={true} />
 										{/if}
 									</div>
 									<div class="flex gap-2">

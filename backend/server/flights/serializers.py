@@ -1,6 +1,17 @@
 from rest_framework import serializers
 from main.utils import CustomModelSerializer
-from .models import EmailAccount, AirlineRule, Flight, FlightGroup
+from .models import Airport, EmailAccount, AirlineRule, Flight, FlightGroup
+
+
+class AirportSerializer(CustomModelSerializer):
+    """Read-only serializer for airport reference data."""
+
+    class Meta:
+        model = Airport
+        fields = [
+            'iata_code', 'name', 'city_name', 'country_code',
+            'latitude', 'longitude',
+        ]
 
 
 class EmailAccountSerializer(CustomModelSerializer):
@@ -72,6 +83,13 @@ class AirlineRuleSerializer(CustomModelSerializer):
 
 
 class FlightSerializer(CustomModelSerializer):
+    departure_airport_detail = AirportSerializer(
+        source='departure_airport_obj', read_only=True
+    )
+    arrival_airport_detail = AirportSerializer(
+        source='arrival_airport_obj', read_only=True
+    )
+
     class Meta:
         model = Flight
         fields = [
@@ -79,11 +97,13 @@ class FlightSerializer(CustomModelSerializer):
             'booking_reference',
             'departure_airport', 'departure_city', 'departure_datetime',
             'departure_terminal', 'departure_gate',
+            'departure_airport_detail',
             'arrival_airport', 'arrival_city', 'arrival_datetime',
             'arrival_terminal', 'arrival_gate',
+            'arrival_airport_detail',
             'passenger_name', 'seat', 'cabin_class',
             'status', 'duration_minutes',
-            'flight_group',
+            'flight_group', 'collection',
             'email_account', 'airline_rule', 'email_subject', 'email_date',
             'is_manually_added',
             'notes', 'created_at', 'updated_at',
@@ -108,7 +128,7 @@ class FlightWriteSerializer(CustomModelSerializer):
             'arrival_terminal', 'arrival_gate',
             'passenger_name', 'seat', 'cabin_class',
             'status', 'duration_minutes',
-            'flight_group',
+            'flight_group', 'collection',
             'notes',
         ]
         read_only_fields = ['id']
@@ -145,6 +165,7 @@ class FlightGroupSerializer(CustomModelSerializer):
         model = FlightGroup
         fields = [
             'id', 'name', 'description', 'is_auto_generated',
+            'collection',
             'flights', 'flight_count',
             'start_date', 'end_date', 'origin', 'destination',
             'route_stops',

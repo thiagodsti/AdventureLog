@@ -766,7 +766,7 @@ class CollectionItineraryItem(models.Model):
     def start_datetime(self):
         obj = self.item
 
-        for field in ("start_date", "check_in", "date"):
+        for field in ("start_date", "check_in", "date", "departure_datetime"):
             if hasattr(obj, field):
                 value = getattr(obj, field)
                 if value:
@@ -778,7 +778,7 @@ class CollectionItineraryItem(models.Model):
     def end_datetime(self):
         obj = self.item
 
-        for field in ("end_date", "check_out"):
+        for field in ("end_date", "check_out", "arrival_datetime"):
             if hasattr(obj, field):
                 value = getattr(obj, field)
                 if value:

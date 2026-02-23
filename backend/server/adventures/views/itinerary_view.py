@@ -1,4 +1,5 @@
 from adventures.models import Location, Collection, CollectionItineraryItem, Transportation, Note, Lodging, Visit, Checklist, Note, CollectionItineraryDay
+from flights.models import Flight
 import datetime
 from django.utils.dateparse import parse_date, parse_datetime
 from django.contrib.contenttypes.models import ContentType
@@ -73,7 +74,7 @@ class ItineraryViewSet(viewsets.ModelViewSet):
                     'lodging': Lodging,
                     'visit': Visit,
                     'checklist': Checklist,
-                    'note': Note,
+                    'flight': Flight,
                 }
 
                 if content_type_val not in content_map:
@@ -101,9 +102,12 @@ class ItineraryViewSet(viewsets.ModelViewSet):
                 if update_item_date and target_date and content_object:
                     # Extract just the date part if target_date is datetime
                     clean_date = str(target_date).split('T')[0] if 'T' in str(target_date) else str(target_date)
-                    
+
+                    # Never modify flight dates — they come from email parsing and are authoritative
+                    if content_type_val == 'flight':
+                        pass
                     # For locations, create an all-day visit instead of updating a date field
-                    if content_type_val == 'location':
+                    elif content_type_val == 'location':
                         # Determine start/end bounds. Support single date or optional start_date/end_date in payload.
                         # Prefer explicit start_date/end_date if provided, otherwise use the single target date.
                         start_input = data.get('start_date') or clean_date

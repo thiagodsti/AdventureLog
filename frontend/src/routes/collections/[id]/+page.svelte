@@ -422,6 +422,46 @@
 			});
 		});
 
+		(collection?.flights || []).forEach((flight) => {
+			if (!flight.departure_datetime) return;
+
+			const times = buildEventTimes({
+				start: flight.departure_datetime,
+				end: flight.arrival_datetime || flight.departure_datetime,
+				timezone: null,
+				mode,
+				allDay: false
+			});
+
+			if (!times) return;
+
+			const route = [flight.departure_airport, flight.arrival_airport]
+				.filter(Boolean)
+				.join(' → ');
+
+			events.push({
+				id: `flight-${flight.id}`,
+				title: `✈️ ${flight.flight_number} ${route}`,
+				start: times.start,
+				end: times.end,
+				backgroundColor: '#0ea5e9',
+				extendedProps: {
+					type: 'flight',
+					category: 'Flight',
+					icon: '✈️',
+					timezone: userTimezone,
+					timezoneUsed: times.timezoneUsed,
+					timezoneLabel: times.timezoneLabel,
+					timezoneMode: mode,
+					isAllDay: false,
+					formattedStart: times.formattedStart,
+					formattedEnd: times.formattedEnd,
+					location: route,
+					description: flight.airline_name || ''
+				}
+			});
+		});
+
 		(collection?.lodging || []).forEach((stay) => {
 			const start = stay.check_in || stay.check_out;
 			if (!start) return;

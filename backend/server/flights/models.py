@@ -54,6 +54,11 @@ class FlightGroup(models.Model):
         default=False,
         help_text="True if this group was auto-created from booking references"
     )
+    collection = models.OneToOneField(
+        'adventures.Collection', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='flight_group',
+        help_text="Auto-created collection for this trip"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -86,6 +91,36 @@ class FlightGroup(models.Model):
             return ''
         origin = flights[0].departure_airport
         return _find_trip_destination(flights, origin)
+
+
+class Airport(models.Model):
+    """
+    Airport reference data with IATA codes and geographic coordinates.
+    Populated via the load_airports management command from OurAirports data.
+    """
+    iata_code = models.CharField(max_length=3, primary_key=True, help_text="IATA 3-letter code")
+    icao_code = models.CharField(max_length=4, blank=True, default='')
+    name = models.CharField(max_length=255)
+    city_name = models.CharField(max_length=255, blank=True, default='')
+    country_code = models.CharField(max_length=2, help_text="ISO 3166-1 alpha-2")
+    region_code = models.CharField(
+        max_length=10, blank=True, default='',
+        help_text="ISO 3166-2 code, e.g. US-CA, BR-SP"
+    )
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    worldtravel_city = models.ForeignKey(
+        'worldtravel.City', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        help_text="Nearest matching city in the WorldTravel database"
+    )
+
+    class Meta:
+        ordering = ['iata_code']
+        verbose_name = "Airport"
+
+    def __str__(self):
+        return f"{self.iata_code} - {self.name} ({self.city_name})"
 
 
 class EmailAccount(models.Model):
@@ -229,6 +264,13 @@ class Flight(models.Model):
         help_text="Trip/group this flight belongs to"
     )
 
+    # Collection association (for itinerary integration)
+    collection = models.ForeignKey(
+        'adventures.Collection', on_delete=models.CASCADE,
+        null=True, blank=True,
+        help_text="Collection/trip this flight is linked to"
+    )
+
     # Flight details
     airline_name = models.CharField(max_length=255, blank=True, default='')
     airline_code = models.CharField(max_length=10, blank=True, default='')
@@ -242,10 +284,22 @@ class Flight(models.Model):
     departure_terminal = models.CharField(max_length=20, blank=True, default='')
     departure_gate = models.CharField(max_length=20, blank=True, default='')
 
+    # Resolved airport objects (auto-set from IATA codes on save)
+    departure_airport_obj = models.ForeignKey(
+        Airport, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='departures',
+        help_text="Resolved airport object for departure"
+    )
+
     # Arrival
     arrival_airport = models.CharField(max_length=10, help_text="IATA airport code")
     arrival_city = models.CharField(max_length=255, blank=True, default='')
     arrival_datetime = models.DateTimeField()
+    arrival_airport_obj = models.ForeignKey(
+        Airport, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='arrivals',
+        help_text="Resolved airport object for arrival"
+    )
     arrival_terminal = models.CharField(max_length=20, blank=True, default='')
     arrival_gate = models.CharField(max_length=20, blank=True, default='')
 
@@ -296,9 +350,26 @@ class Flight(models.Model):
         return f"{self.flight_number}: {self.departure_airport} → {self.arrival_airport} ({self.departure_datetime.date()})"
 
     def save(self, *args, **kwargs):
+        # Auto-resolve airport FKs from IATA codes
+        if self.departure_airport and not self.departure_airport_obj_id:
+            self.departure_airport_obj = Airport.objects.filter(
+                iata_code=self.departure_airport.upper()
+            ).first()
+            # Backfill city name from airport data if empty
+            if not self.departure_city and self.departure_airport_obj:
+                self.departure_city = self.departure_airport_obj.city_name
+        if self.arrival_airport and not self.arrival_airport_obj_id:
+            self.arrival_airport_obj = Airport.objects.filter(
+                iata_code=self.arrival_airport.upper()
+            ).first()
+            if not self.arrival_city and self.arrival_airport_obj:
+                self.arrival_city = self.arrival_airport_obj.city_name
+
         if self.departure_datetime and self.arrival_datetime and not self.duration_minutes:
             delta = self.arrival_datetime - self.departure_datetime
-            self.duration_minutes = max(int(delta.total_seconds() / 60), 1)
+            minutes = int(delta.total_seconds() / 60)
+            if minutes > 0:
+                self.duration_minutes = minutes
             # Auto-compute status based on arrival time; never override a manual 'cancelled'
         if self.status != 'cancelled' and self.arrival_datetime:
             from django.utils import timezone as _tz

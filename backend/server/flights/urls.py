@@ -1,8 +1,9 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from flights.views import EmailAccountViewSet, FlightViewSet, FlightGroupViewSet, test_email_connection, forwarding_address
+from flights.views import AirportViewSet, EmailAccountViewSet, FlightViewSet, FlightGroupViewSet, test_email_connection, forwarding_address
 
 router = DefaultRouter()
+router.register(r'airports', AirportViewSet, basename='airport')
 router.register(r'email-accounts', EmailAccountViewSet, basename='email-account')
 router.register(r'flights', FlightViewSet, basename='flight')
 router.register(r'flight-groups', FlightGroupViewSet, basename='flight-group')
