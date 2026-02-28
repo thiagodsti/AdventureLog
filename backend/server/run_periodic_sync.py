@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
 Periodic sync runner for AdventureLog.
-Runs two periodic tasks:
+Runs periodic tasks:
   1. sync_visited_regions — once daily at midnight
   2. sync_flight_emails — every 10 minutes
+  3. update_flight_statuses — every 10 minutes (after email sync)
 Managed by supervisord to ensure it inherits container environment variables.
 """
 import os
@@ -72,6 +73,28 @@ def run_flight_email_sync():
         logger.error(f"Flight email sync failed: {e}", exc_info=True)
 
 
+def update_flight_statuses():
+    """Mark upcoming flights as completed once their arrival time has passed.
+
+    Uses .save() on each flight so the post_save signal fires
+    (which auto-marks visited cities/regions).
+    """
+    from django.utils import timezone as tz
+    from flights.models import Flight
+
+    stale = Flight.objects.filter(
+        status='upcoming',
+        arrival_datetime__lt=tz.now(),
+    )
+    count = stale.count()
+    if count == 0:
+        return
+    logger.info("Updating %d flight(s) from 'upcoming' to 'completed'...", count)
+    for flight in stale:
+        flight.save(update_fields=['status', 'updated_at'])
+    logger.info("Flight status update completed")
+
+
 def midnight_sync_loop():
     """Thread: run region sync at midnight daily."""
     while not _stop_event.is_set():
@@ -92,6 +115,7 @@ def flight_sync_loop():
         return
     while not _stop_event.is_set():
         run_flight_email_sync()
+        update_flight_statuses()
         if _stop_event.wait(FLIGHT_SYNC_INTERVAL):
             break
 

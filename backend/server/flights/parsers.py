@@ -167,7 +167,7 @@ def _extract_latam_flights(email_msg: EmailMessage, rule) -> list[dict]:
     _DATE_RE = r'(\d{1,2}\s+(?:de\s+)?[A-Za-zÀ-ÿ]+\.?\s+(?:de\s+)?\d{4})'
     _TIME_RE = r'(\d{1,2}:\d{2})'
     _AIRPORT_RE = r'\(([A-Z]{3})\)'
-    _FLIGHT_NUM_RE = r'([A-Z0-9]{2}\s*\d{3,5})'
+    _FLIGHT_NUM_RE = r'([A-Z0-9]{2}\s*\d{3,5})(?!\w)'
 
     # ---- Split body into directions (Voo de ida / Voo de volta) ----
     # Find direction headers

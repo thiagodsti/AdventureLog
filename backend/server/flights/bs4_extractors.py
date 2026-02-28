@@ -224,7 +224,7 @@ def _extract_latam_bs4(html: str, rule, email_msg) -> list[dict]:
     _DATE_RE = r'(\d{1,2}\s+(?:de\s+)?[A-Za-zÀ-ÿ]+\.?\s+(?:de\s+)?\d{4})'
     _TIME_RE = r'(\d{1,2}:\d{2})'
     _AIRPORT_RE = r'\(([A-Z]{3})\)'
-    _FLIGHT_NUM_RE = r'([A-Z0-9]{2}\s*\d{3,5})'
+    _FLIGHT_NUM_RE = r'([A-Z0-9]{2}\s*\d{3,5})(?!\w)'
 
     # Split by direction headers
     direction_splits = re.split(

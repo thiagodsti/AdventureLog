@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 # Increment this version whenever rules are added or modified.
 # When a sync detects a version mismatch, it performs a full rescan
 # instead of an incremental one (deduplication prevents duplicate flights).
-RULES_VERSION = '11'
+RULES_VERSION = '12'
 
 # ---------------------------------------------------------------------------
 # Flexible date sub-pattern (reusable)
@@ -57,7 +57,7 @@ BUILTIN_AIRLINE_RULES = [
             # Uses broad airline code match to capture codeshares (LH, SK, etc.)
             r'\((?P<departure_airport>[A-Z]{3})\)'
             r'\s+'
-            r'(?P<flight_number>[A-Z0-9]{2}\s*\d{3,5})'
+            r'(?P<flight_number>[A-Z0-9]{2}\s*\d{3,5})(?!\w)'
             r'.*?'
             r'\((?P<arrival_airport>[A-Z]{3})\)'
         ),
