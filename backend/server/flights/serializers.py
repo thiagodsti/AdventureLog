@@ -174,11 +174,13 @@ class FlightGroupSerializer(CustomModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at', 'is_auto_generated']
 
     def get_flight_count(self, obj):
-        return obj.flights.count()
+        # Use prefetched flights cache instead of a COUNT query
+        return len(obj.flights.all())
 
     def get_route_stops(self, obj):
         """Return ordered list of airport codes representing the full route."""
-        flights = list(obj.flights.order_by('departure_datetime'))
+        # Use prefetched flights cache, sort in Python to avoid extra query
+        flights = sorted(obj.flights.all(), key=lambda f: f.departure_datetime or f.created_at)
         if not flights:
             return []
         stops = [flights[0].departure_airport]

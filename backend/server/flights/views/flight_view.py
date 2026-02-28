@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from django.db.models import Sum
 from django.utils import timezone
 
 from flights.models import Airport, Flight
@@ -18,7 +19,11 @@ class FlightViewSet(viewsets.ModelViewSet):
         return FlightSerializer
 
     def get_queryset(self):
-        qs = Flight.objects.filter(user=self.request.user)
+        qs = Flight.objects.filter(
+            user=self.request.user
+        ).select_related(
+            'departure_airport_obj', 'arrival_airport_obj'
+        )
 
         # Optional filters
         status_filter = self.request.query_params.get('status')
@@ -62,21 +67,17 @@ class FlightViewSet(viewsets.ModelViewSet):
         """Get flight statistics for the user."""
         qs = self.get_queryset()
         total_flights = qs.count()
-        total_duration = sum(
-            f.duration_minutes for f in qs if f.duration_minutes
-        )
-        airlines = qs.values_list('airline_name', flat=True).distinct()
-        airports_visited = set()
-        for f in qs:
-            airports_visited.add(f.departure_airport)
-            airports_visited.add(f.arrival_airport)
-        airports_visited.discard('')
+        total_duration = qs.aggregate(total=Sum('duration_minutes'))['total'] or 0
+        airlines = list(qs.exclude(airline_name='').order_by('airline_name').values_list('airline_name', flat=True).distinct())
+        dep_airports = set(qs.exclude(departure_airport='').values_list('departure_airport', flat=True))
+        arr_airports = set(qs.exclude(arrival_airport='').values_list('arrival_airport', flat=True))
+        airports_visited = dep_airports | arr_airports
 
         return Response({
             'total_flights': total_flights,
             'total_duration_minutes': total_duration,
             'total_duration_hours': round(total_duration / 60, 1) if total_duration else 0,
-            'unique_airlines': list(airlines),
+            'unique_airlines': airlines,
             'unique_airports_count': len(airports_visited),
             'unique_airports': sorted(airports_visited),
         })
@@ -84,26 +85,31 @@ class FlightViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def calendar(self, request):
         """Return flights formatted for calendar display."""
-        flights = self.get_queryset()
+        flights = self.get_queryset().values(
+            'id', 'flight_number', 'airline_name',
+            'departure_airport', 'arrival_airport',
+            'departure_city', 'arrival_city',
+            'departure_datetime', 'arrival_datetime', 'status',
+        )
         result = []
         for f in flights:
             result.append({
-                'id': str(f.id),
-                'flight_number': f.flight_number,
-                'airline_name': f.airline_name or '',
-                'departure_airport': f.departure_airport,
-                'arrival_airport': f.arrival_airport,
-                'departure_city': f.departure_city or '',
-                'arrival_city': f.arrival_city or '',
+                'id': str(f['id']),
+                'flight_number': f['flight_number'],
+                'airline_name': f['airline_name'] or '',
+                'departure_airport': f['departure_airport'],
+                'arrival_airport': f['arrival_airport'],
+                'departure_city': f['departure_city'] or '',
+                'arrival_city': f['arrival_city'] or '',
                 'departure_datetime': (
-                    f.departure_datetime.isoformat()
-                    if f.departure_datetime else None
+                    f['departure_datetime'].isoformat()
+                    if f['departure_datetime'] else None
                 ),
                 'arrival_datetime': (
-                    f.arrival_datetime.isoformat()
-                    if f.arrival_datetime else None
+                    f['arrival_datetime'].isoformat()
+                    if f['arrival_datetime'] else None
                 ),
-                'status': f.status,
+                'status': f['status'],
             })
         return Response(result)
 
